@@ -3,225 +3,170 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AI-SHINAN</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+
+<title>AIログ</title>
 
 <style>
-:root{
-  --bg:#0a0a0f;
-  --surface:#13131a;
-  --border:#2a2a3d;
-  --text:#e8e8f0;
-  --accent:#7b61ff;
-}
+body { margin:0; background:#0f0f10; color:#eee; font-family:sans-serif;}
 
-/* ===== 全体 ===== */
-body{
-  margin:0;
-  font-family:sans-serif;
-  background:var(--bg);
-  color:var(--text);
-}
-
-/* ===== ロック ===== */
-#lock{
+/* ロック */
+#lock {
   position:fixed;
   inset:0;
   display:flex;
+  flex-direction:column;
   align-items:center;
   justify-content:center;
-  flex-direction:column;
+  background:#0f0f10;
 }
-input{
+input {
   padding:10px;
   border-radius:8px;
-  border:1px solid var(--border);
-  background:var(--surface);
-  color:var(--text);
-}
-button{
-  margin-top:10px;
-  padding:10px 20px;
   border:none;
-  border-radius:8px;
-  background:var(--accent);
-  color:white;
-  cursor:pointer;
+  margin-top:10px;
+}
+button {
+  margin-top:10px;
+  padding:8px 12px;
+  background:#2a2a2a;
+  color:#fff;
+  border:none;
+  border-radius:6px;
 }
 
-/* ===== アプリ ===== */
-#app{display:none; height:100vh;}
-
-.layout{
-  display:flex;
-  height:100%;
-}
-
-/* ===== サイドバー ===== */
-.sidebar{
-  width:260px;
-  background:var(--surface);
-  border-right:1px solid var(--border);
-  overflow:auto;
-}
-
-/* ===== メイン ===== */
-.main{
-  flex:1;
-  display:flex;
-  flex-direction:column;
-}
-
-.viewer{
-  flex:1;
-  padding:15px;
-  overflow:auto;
-}
-
-/* ===== ファイル ===== */
-.file{
-  padding:10px;
-  border-bottom:1px solid var(--border);
-  cursor:pointer;
-}
-.file:hover{background:#1c1c28}
-
-/* ===== 画像 ===== */
-img{max-width:100%;}
-iframe{width:100%;height:80vh;border:none;}
-
-/* ===== スマホ対応 ===== */
-@media (max-width:768px){
-  .layout{
-    flex-direction:column;
-  }
-
-  .sidebar{
-    width:100%;
-    height:40vh;
-  }
-
-  .main{
-    height:60vh;
-  }
-
-  button,input{
-    font-size:16px;
-  }
-}
+/* 本体 */
+.topbar { height:55px; display:flex; align-items:center; justify-content:space-between; background:#1c1c1e; padding:0 10px;}
+.sidebar { position:fixed; top:55px; left:-260px; width:260px; height:calc(100% - 55px); background:#1c1c1e; overflow:auto; transition:0.3s;}
+.sidebar.open { left:0;}
+.file-item { padding:15px; border-bottom:1px solid #333; cursor:pointer;}
+.viewer { height:calc(100vh - 55px); padding:15px; overflow:auto; white-space:pre-wrap;}
 </style>
 </head>
 
 <body>
 
-<!-- ロック -->
+<!-- ロック画面 -->
 <div id="lock">
   <h2>AI-SHINAN</h2>
-  <input id="pw" type="password" placeholder="password">
+  <input id="pw" type="password" placeholder="enter password">
   <button onclick="unlock()">unlock</button>
 </div>
 
 <!-- 本体 -->
-<div id="app">
-  <div class="layout">
-    <div class="sidebar">
-      <input type="file" id="file" multiple>
-      <div id="list"></div>
-    </div>
+<div id="app" style="display:none;">
 
-    <div class="main">
-      <div class="viewer" id="viewer">ZIPを入れてね</div>
-    </div>
+<div class="topbar">
+  <div onclick="toggleMenu()">☰</div>
+  <div>AIログ</div>
+  <div>
+    <input type="file" id="txtInput" hidden>
+    <button onclick="txtInput.click()">TXT</button>
+
+    <input type="file" id="zipInput" hidden>
+    <button onclick="zipInput.click()">ZIP</button>
   </div>
 </div>
 
+<div id="sidebar" class="sidebar"></div>
+<div id="viewer" class="viewer"></div>
+
+</div>
+
 <script>
+// ===== パスワード =====
 const PASSWORD = "AI-shinan";
 
-let archives = {};
-
 function unlock(){
-  if(document.getElementById("pw").value === PASSWORD){
+  const v = document.getElementById("pw").value;
+  if(v === PASSWORD){
     document.getElementById("lock").style.display="none";
     document.getElementById("app").style.display="block";
+    loadList();
   }
 }
 
-document.getElementById("file").addEventListener("change", e=>{
-  [...e.target.files].forEach(loadZip);
-});
+// ===== Supabase =====
+const SUPABASE_URL = "ここ";
+const SUPABASE_KEY = "ここ";
 
-async function loadZip(file){
-  const zip = await JSZip.loadAsync(file);
-  const name = file.name;
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-  archives[name] = {};
+// ===== UI =====
+const sidebar = document.getElementById("sidebar");
+const viewer = document.getElementById("viewer");
 
-  zip.forEach(async (path, entry)=>{
-    if(entry.dir) return;
-
-    const ext = path.split(".").pop().toLowerCase();
-
-    const type =
-      ["png","jpg","jpeg","gif","webp"].includes(ext) ? "image" :
-      ext === "pdf" ? "pdf" : "text";
-
-    const data = await entry.async(type==="text"?"string":"base64");
-
-    archives[name][path] = {name:path, type, data};
-  });
-
-  render();
+function toggleMenu(){
+  sidebar.classList.toggle("open");
 }
 
-function render(){
-  const list = document.getElementById("list");
-  list.innerHTML="";
+// ===== TXT =====
+txtInput.addEventListener("change", async (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
 
-  for(const zip in archives){
-    for(const path in archives[zip]){
-      const f = archives[zip][path];
+  await upload(file.name, file);
+  loadList();
+});
 
-      const el = document.createElement("div");
-      el.className="file";
-      el.textContent=f.name;
+// ===== ZIP =====
+zipInput.addEventListener("change", async (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
 
-      el.onclick=()=>openFile(zip,path);
+  await handleZip(file);
+  loadList();
+});
 
-      list.appendChild(el);
+// ===== ZIP処理 =====
+async function handleZip(file){
+  const zip = await JSZip.loadAsync(file);
+
+  for(const name in zip.files){
+    const entry = zip.files[name];
+
+    if(entry.dir) continue;
+
+    if(name.endsWith(".txt")){
+      const blob = await entry.async("blob");
+      await upload(name, blob);
     }
   }
 }
 
-function escape(s){
-  return s.replace(/[&<>"']/g,m=>({
-    "&":"&amp;","<":"&lt;",">":"&gt;",
-    '"':"&quot;","'":"&#39;"
-  }[m]));
+// ===== アップロード =====
+async function upload(name, file){
+  await supabaseClient
+    .storage
+    .from("logs")
+    .upload(Date.now()+"_"+name, file);
 }
 
-function openFile(zip,path){
-  const f = archives[zip][path];
-  const v = document.getElementById("viewer");
+// ===== 一覧 =====
+async function loadList(){
+  sidebar.innerHTML="";
 
-  v.innerHTML="";
+  const { data } = await supabaseClient.storage.from("logs").list();
 
-  if(f.type==="text"){
-    v.innerHTML=`<pre>${escape(f.data)}</pre>`;
-  }
+  if(!data) return;
 
-  if(f.type==="image"){
-    const img=document.createElement("img");
-    img.src="data:image/*;base64,"+f.data;
-    v.appendChild(img);
-  }
+  data.forEach(file=>{
+    const div = document.createElement("div");
+    div.className="file-item";
+    div.textContent=file.name;
 
-  if(f.type==="pdf"){
-    const ifr=document.createElement("iframe");
-    ifr.src="data:application/pdf;base64,"+f.data;
-    v.appendChild(ifr);
-  }
+    div.onclick = async ()=>{
+      const { data } = supabaseClient.storage.from("logs").getPublicUrl(file.name);
+      const res = await fetch(data.publicUrl);
+      const text = await res.text();
+      viewer.textContent = text;
+      toggleMenu();
+    };
+
+    sidebar.appendChild(div);
+  });
 }
 </script>
 
