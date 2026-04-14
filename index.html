@@ -12,9 +12,9 @@
 <style>
 body { margin:0; background:#0f0f10; color:#eee; font-family:sans-serif; }
 
+/* ロック画面 */
 #lock {
-  position:fixed;
-  inset:0;
+  position:fixed; inset:0;
   background:#000;
   display:flex;
   flex-direction:column;
@@ -23,22 +23,64 @@ body { margin:0; background:#0f0f10; color:#eee; font-family:sans-serif; }
   gap:10px;
 }
 
+/* 上バー */
+.topbar {
+  height:55px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  background:#1c1c1e;
+  padding:0 10px;
+}
+
+/* ボタン */
+button {
+  margin-left:5px;
+  padding:6px 10px;
+  background:#2a2a2a;
+  color:#eee;
+  border:none;
+  border-radius:6px;
+}
+
+/* サイド */
+.sidebar {
+  position:fixed;
+  top:55px;
+  left:-260px;
+  width:260px;
+  height:calc(100% - 55px);
+  background:#1c1c1e;
+  overflow:auto;
+  transition:0.3s;
+}
+.sidebar.open { left:0; }
+
+.file-item {
+  padding:12px;
+  border-bottom:1px solid #333;
+  cursor:pointer;
+}
+
+/* ビュー */
+.viewer {
+  height:calc(100vh - 55px);
+  padding:15px;
+  overflow:auto;
+  white-space:pre-wrap;
+}
+
+/* チャット */
 #chat {
   padding:10px;
   background:#111;
 }
-
 textarea {
   width:100%;
   height:80px;
+  background:#1c1c1e;
+  color:#fff;
 }
-
-.topbar { height:55px; display:flex; align-items:center; justify-content:space-between; background:#1c1c1e; padding:0 10px;}
-button { margin-left:5px; padding:6px 10px; background:#2a2a2a; color:#eee; border:none; border-radius:6px;}
-.sidebar { position:fixed; top:55px; left:-260px; width:260px; height:calc(100% - 55px); background:#1c1c1e; overflow:auto; transition:0.3s;}
-.sidebar.open { left:0;}
-.file-item { padding:15px; border-bottom:1px solid #333; cursor:pointer;}
-.viewer { height:calc(100vh - 55px); padding:15px; overflow:auto; white-space:pre-wrap;}
 </style>
 </head>
 
@@ -50,15 +92,15 @@ button { margin-left:5px; padding:6px 10px; background:#2a2a2a; color:#eee; bord
   <button onclick="login()">入る</button>
 </div>
 
-<!-- AIチャット保存 -->
+<!-- チャット保存 -->
 <div id="chat">
-  <textarea id="msg"></textarea>
+  <textarea id="msg" placeholder="AI会話を書く"></textarea>
   <button onclick="saveMsg()">保存</button>
 </div>
 
 <div class="topbar">
   <div onclick="toggleMenu()">☰</div>
-  <div>ログ</div>
+  <div>AIログ</div>
   <div>
     <input type="file" id="txtInput" hidden>
     <button onclick="txtInput.click()">TXT</button>
@@ -72,40 +114,53 @@ button { margin-left:5px; padding:6px 10px; background:#2a2a2a; color:#eee; bord
 <div id="viewer" class="viewer"></div>
 
 <script>
-const PASSWORD = "ai-shinan";
+const PASSWORD = "AI-shinan";
 
-const SUPABASE_URL = "ここ";
-const SUPABASE_KEY = "ここ";
+/* Supabase */
+const SUPABASE_URL = "ここにURL";
+const SUPABASE_KEY = "ここにKEY";
 
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const lock = document.getElementById("lock");
+const sidebar = document.getElementById("sidebar");
+const viewer = document.getElementById("viewer");
 
+/* ログイン */
 function login() {
   const pw = document.getElementById("pw").value;
   if (pw === PASSWORD) {
     lock.style.display = "none";
+    loadList();
+  } else {
+    alert("パスワード違う");
   }
 }
 
-// AI会話保存
-async function saveMsg() {
-  const text = document.getElementById("msg").value;
-
-  await sb.storage.from("logs").upload(
-    Date.now() + ".txt",
-    new Blob([text], { type:"text/plain" })
-  );
-
-  loadList();
-}
-
-// メニュー
+/* サイド */
 function toggleMenu() {
   sidebar.classList.toggle("open");
 }
 
-// TXT
+/* AI会話保存 */
+async function saveMsg() {
+  const text = document.getElementById("msg").value;
+
+  const { error } = await sb.storage.from("logs").upload(
+    Date.now() + ".txt",
+    new Blob([text], { type:"text/plain" })
+  );
+
+  if (error) {
+    alert("エラー: " + error.message);
+  } else {
+    alert("保存した");
+    document.getElementById("msg").value = "";
+    loadList();
+  }
+}
+
+/* TXT */
 txtInput.addEventListener("change", async (e) => {
   const file = e.target.files[0];
   if (!file) return;
@@ -114,39 +169,45 @@ txtInput.addEventListener("change", async (e) => {
   loadList();
 });
 
-// ZIP
+/* ZIP */
 zipInput.addEventListener("change", async (e) => {
   const file = e.target.files[0];
   if (!file) return;
 
-  await handleZip(file);
-  loadList();
-});
-
-async function handleZip(file) {
   const zip = await JSZip.loadAsync(file);
 
   for (const name in zip.files) {
     const entry = zip.files[name];
-
     if (entry.dir) continue;
 
     if (entry.name.endsWith(".txt")) {
       const blob = await entry.async("blob");
-      await sb.storage.from("logs").upload(Date.now()+"_"+entry.name, blob);
+
+      await sb.storage.from("logs").upload(
+        Date.now()+"_"+entry.name,
+        blob
+      );
     }
   }
-}
 
+  loadList();
+});
+
+/* 一覧 */
 async function loadList() {
   sidebar.innerHTML = "";
 
-  const { data } = await sb.storage.from("logs").list();
+  const { data, error } = await sb.storage.from("logs").list();
+
+  if (error) {
+    alert(error.message);
+    return;
+  }
 
   data.forEach(file => {
     const div = document.createElement("div");
-    div.textContent = file.name;
     div.className = "file-item";
+    div.textContent = file.name;
 
     div.onclick = async () => {
       const { data } = sb.storage.from("logs").getPublicUrl(file.name);
@@ -158,8 +219,6 @@ async function loadList() {
     sidebar.appendChild(div);
   });
 }
-
-loadList();
 </script>
 
 </body>
