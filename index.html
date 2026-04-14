@@ -3,34 +3,36 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>test</title>
+<title>fix</title>
 </head>
 <body>
 
 <div id="lock">
   <input id="pw" type="password">
-  <button onclick="login()">入る</button>
+  <button id="btn">入る</button>
 </div>
 
 <div id="main" style="display:none;">
-  ログイン成功
+  OK
 </div>
 
 <script>
 const PASSWORD = "ai-shinan";
 
-function login() {
-  const pw = document.getElementById("pw").value;
+window.onload = () => {
+  document.getElementById("btn").addEventListener("click", () => {
+    const pw = document.getElementById("pw").value;
 
-  alert("入力: " + pw); // ←これ出るか確認
+    console.log("click ok:", pw);
 
-  if (pw === PASSWORD) {
-    document.getElementById("lock").style.display = "none";
-    document.getElementById("main").style.display = "block";
-  } else {
-    alert("違う");
-  }
-}
+    if (pw === PASSWORD) {
+      document.getElementById("lock").style.display = "none";
+      document.getElementById("main").style.display = "block";
+    } else {
+      alert("違う");
+    }
+  });
+};
 </script>
 
 </body>
