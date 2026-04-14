@@ -3,36 +3,163 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>fix</title>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+
+<title>AIログ</title>
+
+<style>
+body { margin:0; background:#0f0f10; color:#eee; font-family:sans-serif; }
+
+#lock {
+  position:fixed;
+  inset:0;
+  background:#000;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  align-items:center;
+  gap:10px;
+}
+
+#chat {
+  padding:10px;
+  background:#111;
+}
+
+textarea {
+  width:100%;
+  height:80px;
+}
+
+.topbar { height:55px; display:flex; align-items:center; justify-content:space-between; background:#1c1c1e; padding:0 10px;}
+button { margin-left:5px; padding:6px 10px; background:#2a2a2a; color:#eee; border:none; border-radius:6px;}
+.sidebar { position:fixed; top:55px; left:-260px; width:260px; height:calc(100% - 55px); background:#1c1c1e; overflow:auto; transition:0.3s;}
+.sidebar.open { left:0;}
+.file-item { padding:15px; border-bottom:1px solid #333; cursor:pointer;}
+.viewer { height:calc(100vh - 55px); padding:15px; overflow:auto; white-space:pre-wrap;}
+</style>
 </head>
+
 <body>
 
+<!-- ロック -->
 <div id="lock">
-  <input id="pw" type="password">
-  <button id="btn">入る</button>
+  <input id="pw" type="password" placeholder="パスワード">
+  <button onclick="login()">入る</button>
 </div>
 
-<div id="main" style="display:none;">
-  OK
+<!-- AIチャット保存 -->
+<div id="chat">
+  <textarea id="msg"></textarea>
+  <button onclick="saveMsg()">保存</button>
 </div>
+
+<div class="topbar">
+  <div onclick="toggleMenu()">☰</div>
+  <div>ログ</div>
+  <div>
+    <input type="file" id="txtInput" hidden>
+    <button onclick="txtInput.click()">TXT</button>
+
+    <input type="file" id="zipInput" hidden>
+    <button onclick="zipInput.click()">ZIP</button>
+  </div>
+</div>
+
+<div id="sidebar" class="sidebar"></div>
+<div id="viewer" class="viewer"></div>
 
 <script>
 const PASSWORD = "ai-shinan";
 
-window.onload = () => {
-  document.getElementById("btn").addEventListener("click", () => {
-    const pw = document.getElementById("pw").value;
+const SUPABASE_URL = "ここ";
+const SUPABASE_KEY = "ここ";
 
-    console.log("click ok:", pw);
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    if (pw === PASSWORD) {
-      document.getElementById("lock").style.display = "none";
-      document.getElementById("main").style.display = "block";
-    } else {
-      alert("違う");
+const lock = document.getElementById("lock");
+
+function login() {
+  const pw = document.getElementById("pw").value;
+  if (pw === PASSWORD) {
+    lock.style.display = "none";
+  }
+}
+
+// AI会話保存
+async function saveMsg() {
+  const text = document.getElementById("msg").value;
+
+  await sb.storage.from("logs").upload(
+    Date.now() + ".txt",
+    new Blob([text], { type:"text/plain" })
+  );
+
+  loadList();
+}
+
+// メニュー
+function toggleMenu() {
+  sidebar.classList.toggle("open");
+}
+
+// TXT
+txtInput.addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  await sb.storage.from("logs").upload(Date.now()+"_"+file.name, file);
+  loadList();
+});
+
+// ZIP
+zipInput.addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  await handleZip(file);
+  loadList();
+});
+
+async function handleZip(file) {
+  const zip = await JSZip.loadAsync(file);
+
+  for (const name in zip.files) {
+    const entry = zip.files[name];
+
+    if (entry.dir) continue;
+
+    if (entry.name.endsWith(".txt")) {
+      const blob = await entry.async("blob");
+      await sb.storage.from("logs").upload(Date.now()+"_"+entry.name, blob);
     }
+  }
+}
+
+async function loadList() {
+  sidebar.innerHTML = "";
+
+  const { data } = await sb.storage.from("logs").list();
+
+  data.forEach(file => {
+    const div = document.createElement("div");
+    div.textContent = file.name;
+    div.className = "file-item";
+
+    div.onclick = async () => {
+      const { data } = sb.storage.from("logs").getPublicUrl(file.name);
+      const res = await fetch(data.publicUrl);
+      viewer.textContent = await res.text();
+      toggleMenu();
+    };
+
+    sidebar.appendChild(div);
   });
-};
+}
+
+loadList();
 </script>
 
 </body>
