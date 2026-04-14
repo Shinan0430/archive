@@ -4,15 +4,21 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
+<title>AIログ</title>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-<title>AIログ</title>
-
 <style>
-body { margin:0; background:#0f0f10; color:#eee; font-family:sans-serif; }
+body {
+  margin:0;
+  background:#0f0f10;
+  color:#eee;
+  font-family:sans-serif;
+  overflow-x:hidden;
+}
 
-/* ロック画面 */
+/* ロック */
 #lock {
   position:fixed;
   inset:0;
@@ -22,16 +28,57 @@ body { margin:0; background:#0f0f10; color:#eee; font-family:sans-serif; }
   justify-content:center;
   align-items:center;
   gap:10px;
+  z-index:999;
 }
 
-input { padding:10px; }
-button { padding:8px 12px; }
+input, button {
+  padding:10px;
+  font-size:16px;
+}
 
-.topbar { height:55px; display:flex; align-items:center; justify-content:space-between; background:#1c1c1e; padding:0 10px;}
-.sidebar { position:fixed; top:55px; left:-260px; width:260px; height:calc(100% - 55px); background:#1c1c1e; overflow:auto; transition:0.3s;}
-.sidebar.open { left:0;}
-.file-item { padding:15px; border-bottom:1px solid #333; cursor:pointer;}
-.viewer { height:calc(100vh - 55px); padding:15px; overflow:auto; white-space:pre-wrap;}
+/* topbar */
+.topbar {
+  height:55px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  background:#1c1c1e;
+  padding:0 10px;
+}
+
+/* sidebar */
+.sidebar {
+  position:fixed;
+  top:55px;
+  left:-280px;
+  width:280px;
+  height:calc(100% - 55px);
+  background:#1c1c1e;
+  overflow:auto;
+  transition:0.3s;
+  z-index:10;
+}
+.sidebar.open { left:0; }
+
+.file-item {
+  padding:14px;
+  border-bottom:1px solid #333;
+  cursor:pointer;
+  font-size:14px;
+}
+
+/* viewer */
+.viewer {
+  height:calc(100vh - 55px);
+  padding:15px;
+  overflow:auto;
+  white-space:pre-wrap;
+}
+
+/* mobile対策 */
+@media (max-width:768px){
+  .sidebar { width:85%; left:-100%; }
+}
 </style>
 </head>
 
@@ -43,9 +90,10 @@ button { padding:8px 12px; }
   <button id="loginBtn">入る</button>
 </div>
 
+<!-- topbar -->
 <div class="topbar">
   <div onclick="toggleMenu()">☰</div>
-  <div>ログ</div>
+  <div>AIログ</div>
   <div>
     <input type="file" id="txtInput" hidden>
     <button onclick="txtInput.click()">TXT</button>
@@ -59,37 +107,47 @@ button { padding:8px 12px; }
 <div id="viewer" class="viewer"></div>
 
 <script>
-const PASSWORD = "ai-shinan";
-
+/* =====================
+   Supabase設定
+===================== */
 const SUPABASE_URL = "ここにURL";
 const SUPABASE_KEY = "ここにKEY";
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+/* =====================
+   パスワード
+===================== */
+const PASSWORD = "ai-shinan";
+
 const lock = document.getElementById("lock");
 const sidebar = document.getElementById("sidebar");
 const viewer = document.getElementById("viewer");
 
-/* ===== ログイン（onclickやめて確実にする） ===== */
-document.getElementById("loginBtn").addEventListener("click", login);
-
-function login() {
+/* =====================
+   ログイン
+===================== */
+document.getElementById("loginBtn").addEventListener("click", () => {
   const pw = document.getElementById("pw").value;
 
   if (pw === PASSWORD) {
     lock.style.display = "none";
     loadList();
   } else {
-    alert("パスワード違う");
+    alert("違う");
   }
-}
+});
 
-/* ===== メニュー ===== */
+/* =====================
+   メニュー
+===================== */
 function toggleMenu() {
   sidebar.classList.toggle("open");
 }
 
-/* ===== TXT ===== */
+/* =====================
+   TXT保存（Supabase）
+===================== */
 txtInput.addEventListener("change", async (e) => {
   const file = e.target.files[0];
   if (!file) return;
@@ -98,7 +156,9 @@ txtInput.addEventListener("change", async (e) => {
   loadList();
 });
 
-/* ===== ZIP（簡略） ===== */
+/* =====================
+   ZIP対応（復活版）
+===================== */
 zipInput.addEventListener("change", async (e) => {
   const file = e.target.files[0];
   if (!file) return;
@@ -118,7 +178,9 @@ zipInput.addEventListener("change", async (e) => {
   loadList();
 });
 
-/* ===== 一覧 ===== */
+/* =====================
+   一覧表示
+===================== */
 async function loadList() {
   sidebar.innerHTML = "";
 
@@ -126,8 +188,8 @@ async function loadList() {
 
   data.forEach(file => {
     const div = document.createElement("div");
-    div.textContent = file.name;
     div.className = "file-item";
+    div.textContent = file.name;
 
     div.onclick = async () => {
       const { data } = sb.storage.from("logs").getPublicUrl(file.name);
