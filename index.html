@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
+<title>Archive Viewer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;800&family=DM+Mono:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #13131a;
+    --surface2: #1c1c28;
+    --border: #2a2a3d;
+    --accent: #7b61ff;
+    --accent2: #ff6b9d;
+    --text: #e8e8f0;
+    --text-dim: #7a7a9a;
+    --text-muted: #4a4a6a;
+    --success: #4ade80;
+    --mono: 'DM Mono', monospace;
+    --sans: 'Syne', sans-serif;
+  }
+  .light {
+    --bg: #f0f0f7;
+    --surface: #ffffff;
+    --surface2: #e8e8f3;
+    --border: #d0d0e0;
+    --accent: #6b4fff;
+    --accent2: #ff4d8d;
+    --text: #1a1a2e;
+    --text-dim: #5a5a7a;
+    --text-muted: #9a9aba;
+    --success: #16a34a;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    transition: background 0.3s, color 0.3s;
+    overflow-x: hidden;
+  }
+
+  /* ── LOCK SCREEN ── */
+  #lock-screen {
+    position: fixed; inset: 0;
+    background: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 1000;
+    flex-direction: column;
+    gap: 2rem;
+  }
+  .lock-inner {
+    display: flex; flex-direction: column; align-items: center; gap: 1.5rem;
+    animation: fadeUp 0.6s ease both;
+  }
+  .lock-logo {
+    font-size: 3rem; font-weight: 800; letter-spacing: -0.04em;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .lock-sub {
+    font-family: var(--mono);
+    color: var(--text-dim); font-size: 0.8rem; letter-spacing: 0.1em;
+  }
+  .lock-form {
+    display: flex; flex-direction: column; align-items: center; gap: 1rem;
+    width: 320px;
+  }
+  .pw-wrap {
+    position: relative; width: 100%;
+  }
+  .pw-wrap input {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.9rem 3rem 0.9rem 1.2rem;
+    font-family: var(--mono);
+    font-size: 1rem;
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .pw-wrap input:focus { border-color: var(--accent); }
+  .pw-wrap input.error { border-color: var(--accent2); animation: shake 0.4s ease; }
+  .eye-btn {
+    position: absolute; right: 1rem; top: 50%; transform: translateY(-50%);
+    background: none; border: none; cursor: pointer;
+    color: var(--text-muted); font-size: 1.1rem; padding: 0;
+    transition: color 0.2s;
+  }
+  .eye-btn:hover { color: var(--text); }
+  .lock-btn {
+    width: 100%;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border: none; border-radius: 10px;
+    padding: 0.9rem;
+    font-family: var(--sans); font-weight: 600; font-size: 1rem;
+    color: #fff; cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+  }
+  .lock-btn:hover { opacity: 0.9; }
+  .lock-btn:active { transform: scale(0.98); }
+  .lock-error {
+    font-family: var(--mono); font-size: 0.75rem;
+    color: var(--accent2); display: none;
+  }
+
+  /* ── APP ── */
+  #app { display: none; min-height: 100vh; }
+
+  /* ── HEADER ── */
+  header {
+    position: sticky; top: 0; z-index: 100;
+    background: color-mix(in srgb, var(--bg) 85%, transparent);
+    backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 1.5rem;
+    height: 56px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .logo {
+    font-size: 1.2rem; font-weight: 800; letter-spacing: -0.03em;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .header-actions { display: flex; align-items: center; gap: 0.5rem; }
+  .icon-btn {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.4rem 0.7rem;
+    cursor: pointer; color: var(--text-dim);
+    font-size: 1rem;
+    transition: all 0.2s;
+    display: flex; align-items: center; gap: 0.4rem;
+    font-family: var(--mono); font-size: 0.75rem;
+  }
+  .icon-btn:hover { border-color: var(--accent); color: var(--text); }
+
+  /* ── LAYOUT ── */
+  .layout {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    min-height: calc(100vh - 56px);
+  }
+  @media (max-width: 768px) {
+    .layout { grid-template-columns: 1fr; }
+    .sidebar { display: none; }
+    .sidebar.open { display: flex; position: fixed; inset: 56px 0 0 0; z-index: 90; }
+  }
+
+  /* ── SIDEBAR ── */
+  .sidebar {
+    border-right: 1px solid var(--border);
+    background: var(--surface);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  .sidebar-header {
+    padding: 1rem 1.2rem 0.8rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .sidebar-title {
+    font-size: 0.7rem; font-family: var(--mono);
+    letter-spacing: 0.12em; color: var(--text-muted);
+    text-transform: uppercase; margin-bottom: 0.8rem;
+  }
+  .upload-btn {
+    width: 100%;
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%);
+    border: none; border-radius: 8px;
+    padding: 0.65rem 1rem;
+    font-family: var(--sans); font-weight: 600; font-size: 0.85rem;
+    color: #fff; cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+    display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+  }
+  .upload-btn:hover { opacity: 0.88; }
+  .upload-btn:active { transform: scale(0.98); }
+  #file-input { display: none; }
+
+  .file-list {
+    flex: 1; overflow-y: auto; padding: 0.6rem;
+  }
+  .file-list::-webkit-scrollbar { width: 4px; }
+  .file-list::-webkit-scrollbar-track { background: transparent; }
+  .file-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .archive-group { margin-bottom: 0.5rem; }
+  .archive-name {
+    font-size: 0.72rem; font-family: var(--mono);
+    color: var(--text-muted); padding: 0.4rem 0.6rem;
+    letter-spacing: 0.05em; text-transform: uppercase;
+    display: flex; align-items: center; gap: 0.4rem;
+  }
+  .archive-name::before {
+    content: ''; display: block;
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--accent);
+  }
+
+  .file-item {
+    display: flex; align-items: center; gap: 0.6rem;
+    padding: 0.55rem 0.7rem;
+    border-radius: 7px; cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    font-size: 0.85rem;
+    color: var(--text-dim);
+  }
+  .file-item:hover { background: var(--surface2); color: var(--text); }
+  .file-item.active {
+    background: color-mix(in srgb, var(--accent) 15%, transparent);
+    color: var(--text);
+    border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  }
+  .file-icon { font-size: 0.95rem; flex-shrink: 0; }
+  .file-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); font-size: 0.78rem; }
+  .file-type-badge {
+    font-size: 0.6rem; font-family: var(--mono);
+    background: var(--surface2); border-radius: 4px;
+    padding: 0.1rem 0.4rem; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.05em;
+    flex-shrink: 0;
+  }
+
+  /* ── MAIN ── */
+  .main {
+    display: flex; flex-direction: column;
+    background: var(--bg);
+    overflow: hidden;
+  }
+
+  /* ── DROP ZONE ── */
+  #drop-zone {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 1rem; padding: 2rem;
+    text-align: center;
+  }
+  .drop-icon {
+    font-size: 3.5rem; opacity: 0.3;
+    animation: float 3s ease-in-out infinite;
+  }
+  .drop-title {
+    font-size: 1.3rem; font-weight: 600; color: var(--text-dim);
+  }
+  .drop-sub {
+    font-family: var(--mono); font-size: 0.75rem;
+    color: var(--text-muted); line-height: 1.8;
+  }
+  #drop-zone.drag-over {
+    background: color-mix(in srgb, var(--accent) 5%, transparent);
+    border-radius: 12px;
+  }
+  #drop-zone.drag-over .drop-icon { opacity: 0.8; }
+
+  /* ── VIEWER ── */
+  #viewer {
+    flex: 1; display: none; flex-direction: column;
+    overflow: hidden;
+  }
+  .viewer-topbar {
+    padding: 0.75rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 1rem;
+    background: var(--surface);
+  }
+  .viewer-filename {
+    font-family: var(--mono); font-size: 0.85rem;
+    color: var(--text-dim); flex: 1;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .viewer-filename span { color: var(--text); font-weight: 500; }
+  .viewer-content {
+    flex: 1; overflow: auto; padding: 1.5rem;
+  }
+  .viewer-content::-webkit-scrollbar { width: 6px; }
+  .viewer-content::-webkit-scrollbar-track { background: transparent; }
+  .viewer-content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* TEXT viewer */
+  .text-content {
+    font-family: var(--mono); font-size: 0.88rem; line-height: 1.9;
+    color: var(--text); white-space: pre-wrap; word-break: break-word;
+    max-width: 800px;
+    background: var(--surface);
+    border-radius: 10px; padding: 1.5rem;
+    border: 1px solid var(--border);
+  }
+
+  /* IMAGE viewer */
+  .image-content {
+    display: flex; align-items: flex-start; justify-content: center;
+  }
+  .image-content img {
+    max-width: 100%; border-radius: 10px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.4);
+  }
+
+  /* PDF viewer */
+  .pdf-content {
+    width: 100%; height: calc(100vh - 160px);
+    border-radius: 10px; border: 1px solid var(--border);
+  }
+
+  /* ── LOADING ── */
+  .loading {
+    display: flex; align-items: center; justify-content: center;
+    gap: 0.5rem; color: var(--text-dim);
+    font-family: var(--mono); font-size: 0.8rem;
+    padding: 3rem;
+  }
+  .spinner {
+    width: 18px; height: 18px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+
+  /* ── EMPTY STATE ── */
+  .empty-list {
+    padding: 2rem 1rem; text-align: center;
+    font-family: var(--mono); font-size: 0.75rem;
+    color: var(--text-muted);
+  }
+
+  /* ── MOBILE MENU BTN ── */
+  .mobile-menu-btn {
+    display: none;
+  }
+  @media (max-width: 768px) {
+    .mobile-menu-btn { display: flex; }
+  }
+
+  /* ── TOAST ── */
+  .toast {
+    position: fixed; bottom: 2rem; left: 50%; transform: translateX(-50%) translateY(10px);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px; padding: 0.7rem 1.2rem;
+    font-family: var(--mono); font-size: 0.78rem;
+    color: var(--text); opacity: 0;
+    transition: all 0.3s; pointer-events: none;
+    white-space: nowrap;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+    z-index: 999;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* ── ANIMATIONS ── */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
+  }
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-6px); }
+    75% { transform: translateX(6px); }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── LOCK SCREEN ── -->
+<div id="lock-screen">
+  <div class="lock-inner">
+    <div class="lock-logo">ARCHIVE</div>
+    <div class="lock-sub">// PRIVATE CONVERSATION VAULT</div>
+    <div class="lock-form">
+      <div class="pw-wrap">
+        <input type="password" id="pw-input" placeholder="パスワードを入力" autocomplete="current-password">
+        <button class="eye-btn" id="eye-btn" title="表示切替">👁</button>
+      </div>
+      <button class="lock-btn" id="unlock-btn">アンロック</button>
+      <div class="lock-error" id="lock-error">⚠ パスワードが違います</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── APP ── -->
+<div id="app">
+  <header>
+    <div class="logo">ARCHIVE</div>
+    <div class="header-actions">
+      <button class="icon-btn mobile-menu-btn" id="mobile-menu-btn">☰ ファイル</button>
+      <button class="icon-btn" id="theme-btn">🌙 ダーク</button>
+      <button class="icon-btn" id="logout-btn">🔒 ロック</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <!-- SIDEBAR -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-title">Archives</div>
+        <button class="upload-btn" onclick="document.getElementById('file-input').click()">
+          + ZIPを追加
+        </button>
+        <input type="file" id="file-input" accept=".zip" multiple>
+      </div>
+      <div class="file-list" id="file-list">
+        <div class="empty-list">ZIPファイルを追加してください</div>
+      </div>
+    </aside>
+
+    <!-- MAIN -->
+    <main class="main" id="main-area">
+      <!-- DROP ZONE -->
+      <div id="drop-zone">
+        <div class="drop-icon">📦</div>
+        <div class="drop-title">ZIPをドロップ</div>
+        <div class="drop-sub">
+          またはサイドバーから「+ ZIPを追加」<br>
+          対応: .txt / .png .jpg .gif .webp / .pdf
+        </div>
+      </div>
+
+      <!-- VIEWER -->
+      <div id="viewer">
+        <div class="viewer-topbar">
+          <span class="viewer-filename" id="viewer-filename">—</span>
+        </div>
+        <div class="viewer-content" id="viewer-content"></div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── CONFIG ──
+const PASSWORD = "archive2024"; // ← ここを変更
+
+// ── STATE ──
+let archives = {};      // { zipName: { fileName: { type, data } } }
+let currentFile = null;
+let isDark = true;
+
+// ── LOCK ──
+const lockScreen = document.getElementById('lock-screen');
+const appEl = document.getElementById('app');
+const pwInput = document.getElementById('pw-input');
+const lockError = document.getElementById('lock-error');
+
+document.getElementById('unlock-btn').addEventListener('click', unlock);
+pwInput.addEventListener('keydown', e => { if (e.key === 'Enter') unlock(); });
+
+document.getElementById('eye-btn').addEventListener('click', () => {
+  pwInput.type = pwInput.type === 'password' ? 'text' : 'password';
+});
+
+function unlock() {
+  if (pwInput.value === PASSWORD) {
+    lockScreen.style.animation = 'fadeUp 0.4s ease reverse both';
+    setTimeout(() => {
+      lockScreen.style.display = 'none';
+      appEl.style.display = 'block';
+    }, 380);
+  } else {
+    pwInput.classList.add('error');
+    lockError.style.display = 'block';
+    setTimeout(() => pwInput.classList.remove('error'), 500);
+    pwInput.value = '';
+  }
+}
+
+document.getElementById('logout-btn').addEventListener('click', () => {
+  appEl.style.display = 'none';
+  lockScreen.style.display = 'flex';
+  lockScreen.style.animation = 'fadeUp 0.4s ease both';
+  pwInput.value = '';
+  lockError.style.display = 'none';
+});
+
+// ── THEME ──
+const themeBtn = document.getElementById('theme-btn');
+themeBtn.addEventListener('click', () => {
+  isDark = !isDark;
+  document.body.classList.toggle('light', !isDark);
+  themeBtn.textContent = isDark ? '🌙 ダーク' : '☀️ ライト';
+});
+
+// ── MOBILE SIDEBAR ──
+const sidebar = document.getElementById('sidebar');
+document.getElementById('mobile-menu-btn').addEventListener('click', () => {
+  sidebar.classList.toggle('open');
+});
+
+// ── FILE INPUT ──
+document.getElementById('file-input').addEventListener('change', e => {
+  [...e.target.files].forEach(loadZip);
+  e.target.value = '';
+});
+
+// ── DRAG & DROP ──
+const dropZone = document.getElementById('drop-zone');
+const mainArea = document.getElementById('main-area');
+
+mainArea.addEventListener('dragover', e => {
+  e.preventDefault();
+  dropZone.classList.add('drag-over');
+});
+mainArea.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+mainArea.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  [...e.dataTransfer.files]
+    .filter(f => f.name.endsWith('.zip'))
+    .forEach(loadZip);
+});
+
+// ── LOAD ZIP ──
+async function loadZip(file) {
+  showToast(`📦 ${file.name} を読み込み中…`);
+  try {
+    const zip = await JSZip.loadAsync(file);
+    const zipName = file.name.replace('.zip', '');
+    archives[zipName] = {};
+
+    const SUPPORTED = /\.(txt|md|png|jpg|jpeg|gif|webp|pdf)$/i;
+    const promises = [];
+
+    zip.forEach((relativePath, entry) => {
+      if (entry.dir) return;
+      const name = relativePath.split('/').pop();
+      if (!SUPPORTED.test(name)) return;
+
+      const ext = name.split('.').pop().toLowerCase();
+      const type = ['png','jpg','jpeg','gif','webp'].includes(ext) ? 'image'
+                  : ext === 'pdf' ? 'pdf' : 'text';
+
+      const p = entry.async(type === 'text' ? 'string' : 'base64').then(data => {
+        archives[zipName][relativePath] = { name, type, data, path: relativePath };
+      });
+      promises.push(p);
+    });
+
+    await Promise.all(promises);
+    renderFileList();
+    showToast(`✅ ${file.name} を読み込みました`);
+  } catch (err) {
+    showToast(`❌ 読み込みエラー: ${err.message}`);
+  }
+}
+
+// ── FILE LIST ──
+function renderFileList() {
+  const listEl = document.getElementById('file-list');
+  listEl.innerHTML = '';
+
+  const zipNames = Object.keys(archives);
+  if (zipNames.length === 0) {
+    listEl.innerHTML = '<div class="empty-list">ZIPファイルを追加してください</div>';
+    return;
+  }
+
+  const typeIcon = { text: '📄', image: '🖼', pdf: '📕' };
+
+  zipNames.forEach(zipName => {
+    const group = document.createElement('div');
+    group.className = 'archive-group';
+
+    const header = document.createElement('div');
+    header.className = 'archive-name';
+    header.textContent = zipName;
+    group.appendChild(header);
+
+    const files = archives[zipName];
+    Object.values(files)
+      .sort((a, b) => a.path.localeCompare(b.path))
+      .forEach(file => {
+        const item = document.createElement('div');
+        item.className = 'file-item';
+        item.dataset.zip = zipName;
+        item.dataset.path = file.path;
+        item.innerHTML = `
+          <span class="file-icon">${typeIcon[file.type]}</span>
+          <span class="file-name">${file.name}</span>
+          <span class="file-type-badge">${file.type}</span>
+        `;
+        item.addEventListener('click', () => {
+          document.querySelectorAll('.file-item').forEach(i => i.classList.remove('active'));
+          item.classList.add('active');
+          openFile(zipName, file.path);
+          // モバイルでサイドバー閉じる
+          if (window.innerWidth <= 768) sidebar.classList.remove('open');
+        });
+        group.appendChild(item);
+      });
+
+    listEl.appendChild(group);
+  });
+}
+
+// ── OPEN FILE ──
+function openFile(zipName, path) {
+  const file = archives[zipName][path];
+  const dropZoneEl = document.getElementById('drop-zone');
+  const viewerEl = document.getElementById('viewer');
+  const filenameEl = document.getElementById('viewer-filename');
+  const contentEl = document.getElementById('viewer-content');
+
+  dropZoneEl.style.display = 'none';
+  viewerEl.style.display = 'flex';
+
+  filenameEl.innerHTML = `<span>${zipName}</span> / ${file.name}`;
+  contentEl.innerHTML = '<div class="loading"><div class="spinner"></div>読み込み中…</div>';
+
+  requestAnimationFrame(() => {
+    if (file.type === 'text') {
+      contentEl.innerHTML = `<pre class="text-content">${escapeHtml(file.data)}</pre>`;
+    } else if (file.type === 'image') {
+      const ext = file.name.split('.').pop().toLowerCase();
+      const mime = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg'
+                 : ext === 'gif' ? 'image/gif'
+                 : ext === 'webp' ? 'image/webp' : 'image/png';
+      contentEl.innerHTML = `<div class="image-content"><img src="data:${mime};base64,${file.data}" alt="${file.name}"></div>`;
+    } else if (file.type === 'pdf') {
+      const blob = b64toBlob(file.data, 'application/pdf');
+      const url = URL.createObjectURL(blob);
+      contentEl.innerHTML = `<iframe class="pdf-content" src="${url}"></iframe>`;
+    }
+  });
+}
+
+// ── UTILS ──
+function escapeHtml(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function b64toBlob(b64, mime) {
+  const bytes = atob(b64);
+  const arr = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+  return new Blob([arr], { type: mime });
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('show'), 2800);
+}
+</script>
+</body>
+</html>
