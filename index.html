@@ -3,102 +3,148 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
-<title>Archive Viewer</title>
+<title>AI-SHINAN</title>
 
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
 <style>
-/* ===== CSS（そのまま） ===== */
-:root {
-  --bg:#0a0a0f; --surface:#13131a; --surface2:#1c1c28;
-  --border:#2a2a3d; --accent:#7b61ff; --accent2:#ff6b9d;
-  --text:#e8e8f0; --text-dim:#7a7a9a;
-  --mono:'DM Mono', monospace; --sans:'Syne', sans-serif;
+:root{
+  --bg:#0a0a0f;
+  --surface:#13131a;
+  --border:#2a2a3d;
+  --text:#e8e8f0;
+  --accent:#7b61ff;
 }
-body { margin:0; font-family:var(--sans); background:var(--bg); color:var(--text); }
 
-#lock-screen {
-  position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+/* ===== 全体 ===== */
+body{
+  margin:0;
+  font-family:sans-serif;
   background:var(--bg);
-}
-.lock-inner { text-align:center; }
-input {
-  padding:10px; border-radius:8px; border:1px solid var(--border);
-  background:var(--surface); color:var(--text);
-}
-button {
-  margin-top:10px; padding:10px 20px;
-  background:linear-gradient(135deg,var(--accent),var(--accent2));
-  border:none; color:white; border-radius:8px; cursor:pointer;
+  color:var(--text);
 }
 
-#app { display:none; }
+/* ===== ロック ===== */
+#lock{
+  position:fixed;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex-direction:column;
+}
+input{
+  padding:10px;
+  border-radius:8px;
+  border:1px solid var(--border);
+  background:var(--surface);
+  color:var(--text);
+}
+button{
+  margin-top:10px;
+  padding:10px 20px;
+  border:none;
+  border-radius:8px;
+  background:var(--accent);
+  color:white;
+  cursor:pointer;
+}
 
-.layout { display:flex; height:100vh; }
+/* ===== アプリ ===== */
+#app{display:none; height:100vh;}
 
-.sidebar {
-  width:260px; background:var(--surface); border-right:1px solid var(--border);
+.layout{
+  display:flex;
+  height:100%;
+}
+
+/* ===== サイドバー ===== */
+.sidebar{
+  width:260px;
+  background:var(--surface);
+  border-right:1px solid var(--border);
   overflow:auto;
 }
 
-.main { flex:1; display:flex; flex-direction:column; }
-
-#drop-zone {
-  flex:1; display:flex; align-items:center; justify-content:center;
-  flex-direction:column; opacity:0.7;
+/* ===== メイン ===== */
+.main{
+  flex:1;
+  display:flex;
+  flex-direction:column;
 }
 
-.file-item {
-  padding:8px; cursor:pointer; border-bottom:1px solid var(--border);
+.viewer{
+  flex:1;
+  padding:15px;
+  overflow:auto;
 }
-.file-item:hover { background:var(--surface2); }
 
-.viewer { flex:1; padding:20px; overflow:auto; }
+/* ===== ファイル ===== */
+.file{
+  padding:10px;
+  border-bottom:1px solid var(--border);
+  cursor:pointer;
+}
+.file:hover{background:#1c1c28}
 
-img { max-width:100%; }
-iframe { width:100%; height:80vh; border:none; }
+/* ===== 画像 ===== */
+img{max-width:100%;}
+iframe{width:100%;height:80vh;border:none;}
+
+/* ===== スマホ対応 ===== */
+@media (max-width:768px){
+  .layout{
+    flex-direction:column;
+  }
+
+  .sidebar{
+    width:100%;
+    height:40vh;
+  }
+
+  .main{
+    height:60vh;
+  }
+
+  button,input{
+    font-size:16px;
+  }
+}
 </style>
 </head>
 
 <body>
 
-<div id="lock-screen">
-  <div class="lock-inner">
-    <h2>ARCHIVE</h2>
-    <input id="pw" type="password" placeholder="password">
-    <br>
-    <button onclick="unlock()">unlock</button>
-  </div>
+<!-- ロック -->
+<div id="lock">
+  <h2>AI-SHINAN</h2>
+  <input id="pw" type="password" placeholder="password">
+  <button onclick="unlock()">unlock</button>
 </div>
 
+<!-- 本体 -->
 <div id="app">
   <div class="layout">
     <div class="sidebar">
-      <input type="file" id="file" multiple accept=".zip">
+      <input type="file" id="file" multiple>
       <div id="list"></div>
     </div>
 
     <div class="main">
-      <div id="drop-zone">ZIPをアップしてね</div>
-      <div class="viewer" id="viewer"></div>
+      <div class="viewer" id="viewer">ZIPを入れてね</div>
     </div>
   </div>
 </div>
 
 <script>
-const PASSWORD = "archive2024";
+const PASSWORD = "AI-shinan";
 
 let archives = {};
 
 function unlock(){
-  const v = document.getElementById("pw").value;
-  if(v === PASSWORD){
-    document.getElementById("lock-screen").style.display="none";
+  if(document.getElementById("pw").value === PASSWORD){
+    document.getElementById("lock").style.display="none";
     document.getElementById("app").style.display="block";
-  } else {
-    alert("wrong");
   }
 }
 
@@ -108,23 +154,22 @@ document.getElementById("file").addEventListener("change", e=>{
 
 async function loadZip(file){
   const zip = await JSZip.loadAsync(file);
-  const zipName = file.name;
+  const name = file.name;
 
-  archives[zipName] = {};
+  archives[name] = {};
 
   zip.forEach(async (path, entry)=>{
     if(entry.dir) return;
 
-    const name = path.split("/").pop();
-    const ext = name.split(".").pop().toLowerCase();
+    const ext = path.split(".").pop().toLowerCase();
 
     const type =
       ["png","jpg","jpeg","gif","webp"].includes(ext) ? "image" :
       ext === "pdf" ? "pdf" : "text";
 
-    const data = await entry.async(type === "text" ? "string" : "base64");
+    const data = await entry.async(type==="text"?"string":"base64");
 
-    archives[zipName][path] = { name, type, data };
+    archives[name][path] = {name:path, type, data};
   });
 
   render();
@@ -132,57 +177,50 @@ async function loadZip(file){
 
 function render(){
   const list = document.getElementById("list");
-  list.innerHTML = "";
+  list.innerHTML="";
 
   for(const zip in archives){
-    const group = document.createElement("div");
-
     for(const path in archives[zip]){
       const f = archives[zip][path];
 
       const el = document.createElement("div");
-      el.className = "file-item";
-      el.textContent = f.name;
+      el.className="file";
+      el.textContent=f.name;
 
-      el.onclick = ()=> openFile(zip, path);
+      el.onclick=()=>openFile(zip,path);
 
-      group.appendChild(el);
+      list.appendChild(el);
     }
-
-    list.appendChild(group);
   }
 }
 
-function escapeHtml(str){
-  return str.replace(/[&<>"']/g, m=>({
-    "&":"&amp;",
-    "<":"&lt;",
-    ">":"&gt;",
-    '"':"&quot;",
-    "'":"&#39;"
+function escape(s){
+  return s.replace(/[&<>"']/g,m=>({
+    "&":"&amp;","<":"&lt;",">":"&gt;",
+    '"':"&quot;","'":"&#39;"
   }[m]));
 }
 
-function openFile(zip, path){
+function openFile(zip,path){
   const f = archives[zip][path];
   const v = document.getElementById("viewer");
 
-  v.innerHTML = "";
+  v.innerHTML="";
 
-  if(f.type === "text"){
-    v.innerHTML = `<pre>${escapeHtml(f.data)}</pre>`;
+  if(f.type==="text"){
+    v.innerHTML=`<pre>${escape(f.data)}</pre>`;
   }
 
-  else if(f.type === "image"){
-    const img = document.createElement("img");
-    img.src = "data:image/*;base64," + f.data;
+  if(f.type==="image"){
+    const img=document.createElement("img");
+    img.src="data:image/*;base64,"+f.data;
     v.appendChild(img);
   }
 
-  else if(f.type === "pdf"){
-    const iframe = document.createElement("iframe");
-    iframe.src = "data:application/pdf;base64," + f.data;
-    v.appendChild(iframe);
+  if(f.type==="pdf"){
+    const ifr=document.createElement("iframe");
+    ifr.src="data:application/pdf;base64,"+f.data;
+    v.appendChild(ifr);
   }
 }
 </script>
