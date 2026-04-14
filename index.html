@@ -2,224 +2,611 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>AI会話ログ</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
-
-<title>AIログ</title>
-
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-body { margin:0; background:#0f0f10; color:#eee; font-family:sans-serif; }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-/* ロック画面 */
-#lock {
-  position:fixed; inset:0;
-  background:#000;
-  display:flex;
-  flex-direction:column;
-  justify-content:center;
-  align-items:center;
-  gap:10px;
-}
+  :root {
+    --bg: #0a0a0b;
+    --surface: #111113;
+    --surface2: #18181b;
+    --border: #2a2a2e;
+    --accent: #7c6af7;
+    --accent2: #a78bfa;
+    --text: #e4e4e7;
+    --muted: #71717a;
+    --success: #34d399;
+    --error: #f87171;
+    --topbar: 52px;
+  }
 
-/* 上バー */
-.topbar {
-  height:55px;
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  background:#1c1c1e;
-  padding:0 10px;
-}
+  html, body {
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Noto Sans JP', sans-serif;
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+  }
 
-/* ボタン */
-button {
-  margin-left:5px;
-  padding:6px 10px;
-  background:#2a2a2a;
-  color:#eee;
-  border:none;
-  border-radius:6px;
-}
+  /* ── パスワード画面 ── */
+  #pw-screen {
+    position: fixed;
+    inset: 0;
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    z-index: 9999;
+    transition: opacity 0.3s;
+  }
 
-/* サイド */
-.sidebar {
-  position:fixed;
-  top:55px;
-  left:-260px;
-  width:260px;
-  height:calc(100% - 55px);
-  background:#1c1c1e;
-  overflow:auto;
-  transition:0.3s;
-}
-.sidebar.open { left:0; }
+  #pw-screen.hidden {
+    opacity: 0;
+    pointer-events: none;
+  }
 
-.file-item {
-  padding:12px;
-  border-bottom:1px solid #333;
-  cursor:pointer;
-}
+  .pw-logo {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 4px;
+    color: var(--accent2);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
 
-/* ビュー */
-.viewer {
-  height:calc(100vh - 55px);
-  padding:15px;
-  overflow:auto;
-  white-space:pre-wrap;
-}
+  .pw-title {
+    font-size: 22px;
+    font-weight: 300;
+    color: var(--text);
+    letter-spacing: 1px;
+  }
 
-/* チャット */
-#chat {
-  padding:10px;
-  background:#111;
-}
-textarea {
-  width:100%;
-  height:80px;
-  background:#1c1c1e;
-  color:#fff;
-}
+  .pw-box {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: min(320px, 88vw);
+  }
+
+  .pw-input {
+    width: 100%;
+    padding: 12px 16px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 15px;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 3px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .pw-input:focus { border-color: var(--accent); }
+  .pw-input.error { border-color: var(--error); animation: shake 0.3s; }
+
+  @keyframes shake {
+    0%,100% { transform: translateX(0); }
+    25% { transform: translateX(-6px); }
+    75% { transform: translateX(6px); }
+  }
+
+  .pw-btn {
+    width: 100%;
+    padding: 12px;
+    background: var(--accent);
+    border: none;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 14px;
+    font-family: 'Noto Sans JP', sans-serif;
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+
+  .pw-btn:active { opacity: 0.8; }
+
+  .pw-err {
+    font-size: 12px;
+    color: var(--error);
+    text-align: center;
+    height: 16px;
+  }
+
+  /* ── トップバー ── */
+  .topbar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: var(--topbar);
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    gap: 10px;
+    z-index: 100;
+  }
+
+  .menu-btn {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    flex-shrink: 0;
+    border-radius: 6px;
+    transition: background 0.2s;
+  }
+  .menu-btn:active { background: var(--surface2); }
+  .menu-btn span {
+    display: block;
+    width: 18px;
+    height: 2px;
+    background: var(--text);
+    border-radius: 2px;
+    transition: 0.3s;
+  }
+  .menu-btn.open span:nth-child(1) { transform: rotate(45deg) translate(5px, 5px); }
+  .menu-btn.open span:nth-child(2) { opacity: 0; }
+  .menu-btn.open span:nth-child(3) { transform: rotate(-45deg) translate(5px, -5px); }
+
+  .topbar-title {
+    flex: 1;
+    font-size: 14px;
+    color: var(--muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .topbar-actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .btn {
+    padding: 7px 12px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 12px;
+    font-family: 'Noto Sans JP', sans-serif;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.2s, border-color 0.2s;
+  }
+  .btn:active { background: var(--border); }
+  .btn.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+
+  /* ── サイドバー ── */
+  .sidebar-overlay {
+    position: fixed;
+    inset: 0;
+    top: var(--topbar);
+    background: rgba(0,0,0,0.5);
+    z-index: 90;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s;
+  }
+  .sidebar-overlay.open {
+    opacity: 1;
+    pointer-events: all;
+  }
+
+  .sidebar {
+    position: fixed;
+    top: var(--topbar);
+    left: 0;
+    width: min(280px, 80vw);
+    height: calc(100% - var(--topbar));
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    z-index: 95;
+    transform: translateX(-100%);
+    transition: transform 0.25s cubic-bezier(0.4,0,0.2,1);
+  }
+  .sidebar.open { transform: translateX(0); }
+
+  .sidebar-header {
+    padding: 14px 16px 10px;
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: var(--muted);
+    text-transform: uppercase;
+    font-family: 'JetBrains Mono', monospace;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .sidebar-empty {
+    padding: 24px 16px;
+    color: var(--muted);
+    font-size: 13px;
+    text-align: center;
+    line-height: 1.8;
+  }
+
+  .file-item {
+    padding: 13px 16px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    transition: background 0.15s;
+  }
+  .file-item:active, .file-item.active { background: var(--surface2); }
+  .file-item.active .file-name { color: var(--accent2); }
+
+  .file-name {
+    font-size: 13px;
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .file-date {
+    font-size: 11px;
+    color: var(--muted);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* ── メインコンテンツ ── */
+  .main {
+    position: fixed;
+    top: var(--topbar);
+    left: 0; right: 0;
+    bottom: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .viewer {
+    padding: 20px 16px 40px;
+    white-space: pre-wrap;
+    font-size: 13px;
+    line-height: 1.85;
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    min-height: 100%;
+    word-break: break-all;
+  }
+
+  .placeholder {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    color: var(--muted);
+    padding: 40px 20px;
+    text-align: center;
+  }
+
+  .placeholder-icon {
+    font-size: 36px;
+    opacity: 0.4;
+  }
+
+  .placeholder-text { font-size: 14px; line-height: 1.7; }
+
+  /* ── トースト通知 ── */
+  #toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px 18px;
+    border-radius: 8px;
+    font-size: 13px;
+    z-index: 999;
+    transition: transform 0.3s cubic-bezier(0.4,0,0.2,1), opacity 0.3s;
+    opacity: 0;
+    white-space: nowrap;
+    max-width: 88vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  #toast.show {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+  }
+  #toast.success { border-color: var(--success); color: var(--success); }
+  #toast.error { border-color: var(--error); color: var(--error); }
+
+  /* ── スクロールバー ── */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 </style>
 </head>
-
 <body>
 
-<!-- ロック -->
-<div id="lock">
-  <input id="pw" type="password" placeholder="パスワード">
-  <button onclick="login()">入る</button>
-</div>
-
-<!-- チャット保存 -->
-<div id="chat">
-  <textarea id="msg" placeholder="AI会話を書く"></textarea>
-  <button onclick="saveMsg()">保存</button>
-</div>
-
-<div class="topbar">
-  <div onclick="toggleMenu()">☰</div>
-  <div>AIログ</div>
-  <div>
-    <input type="file" id="txtInput" hidden>
-    <button onclick="txtInput.click()">TXT</button>
-
-    <input type="file" id="zipInput" hidden>
-    <button onclick="zipInput.click()">ZIP</button>
+<!-- パスワード画面 -->
+<div id="pw-screen">
+  <div class="pw-logo">AI LOG VIEWER</div>
+  <div class="pw-title">パスワードを入力</div>
+  <div class="pw-box">
+    <input type="password" class="pw-input" id="pw-input" placeholder="password" autocomplete="off">
+    <div class="pw-err" id="pw-err"></div>
+    <button class="pw-btn" onclick="checkPassword()">ロック解除</button>
   </div>
 </div>
 
-<div id="sidebar" class="sidebar"></div>
-<div id="viewer" class="viewer"></div>
+<!-- トップバー -->
+<div class="topbar">
+  <div class="menu-btn" id="menu-btn" onclick="toggleMenu()">
+    <span></span><span></span><span></span>
+  </div>
+  <div class="topbar-title" id="topbar-title">AI会話ログ</div>
+  <div class="topbar-actions">
+    <input type="file" id="zipInput" accept=".zip" hidden>
+    <button class="btn primary" onclick="zipInput.click()">ZIP読み込み</button>
+    <button class="btn" onclick="clearAll()">全削除</button>
+  </div>
+</div>
+
+<!-- オーバーレイ -->
+<div class="sidebar-overlay" id="overlay" onclick="closeMenu()"></div>
+
+<!-- サイドバー -->
+<div class="sidebar" id="sidebar">
+  <div class="sidebar-header">保存済み一覧</div>
+  <div id="file-list"></div>
+</div>
+
+<!-- メイン -->
+<div class="main">
+  <div id="viewer">
+    <div class="placeholder">
+      <div class="placeholder-icon">📂</div>
+      <div class="placeholder-text">ZIPを読み込むと<br>会話ログが表示される</div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
 
 <script>
-const PASSWORD = "AI-shinan";
+const PASS = "ai-shinan";
+const STORAGE_KEY = "ai_logs_v2";
 
-/* Supabase */
-const SUPABASE_URL = "ここにURL";
-const SUPABASE_KEY = "ここにKEY";
+// ── パスワード ──
+const pwScreen = document.getElementById("pw-screen");
+const pwInput  = document.getElementById("pw-input");
+const pwErr    = document.getElementById("pw-err");
 
-const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+pwInput.addEventListener("keydown", e => { if (e.key === "Enter") checkPassword(); });
 
-const lock = document.getElementById("lock");
-const sidebar = document.getElementById("sidebar");
-const viewer = document.getElementById("viewer");
-
-/* ログイン */
-function login() {
-  const pw = document.getElementById("pw").value;
-  if (pw === PASSWORD) {
-    lock.style.display = "none";
-    loadList();
+function checkPassword() {
+  if (pwInput.value === PASS) {
+    pwScreen.classList.add("hidden");
+    setTimeout(() => pwScreen.style.display = "none", 300);
+    renderList();
   } else {
-    alert("パスワード違う");
+    pwErr.textContent = "パスワードが違う";
+    pwInput.classList.add("error");
+    pwInput.value = "";
+    setTimeout(() => {
+      pwInput.classList.remove("error");
+      pwErr.textContent = "";
+    }, 1500);
   }
 }
 
-/* サイド */
+// ── UI制御 ──
+const sidebar  = document.getElementById("sidebar");
+const overlay  = document.getElementById("overlay");
+const menuBtn  = document.getElementById("menu-btn");
+let menuOpen = false;
+
 function toggleMenu() {
-  sidebar.classList.toggle("open");
+  menuOpen = !menuOpen;
+  sidebar.classList.toggle("open", menuOpen);
+  overlay.classList.toggle("open", menuOpen);
+  menuBtn.classList.toggle("open", menuOpen);
 }
 
-/* AI会話保存 */
-async function saveMsg() {
-  const text = document.getElementById("msg").value;
+function closeMenu() {
+  menuOpen = false;
+  sidebar.classList.remove("open");
+  overlay.classList.remove("open");
+  menuBtn.classList.remove("open");
+}
 
-  const { error } = await sb.storage.from("logs").upload(
-    Date.now() + ".txt",
-    new Blob([text], { type:"text/plain" })
-  );
+// ── トースト ──
+let toastTimer;
+function showToast(msg, type = "") {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.className = "show " + type;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.className = "", 2500);
+}
 
-  if (error) {
-    alert("エラー: " + error.message);
-  } else {
-    alert("保存した");
-    document.getElementById("msg").value = "";
-    loadList();
+// ── ストレージ ──
+function loadLogs() {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+  } catch { return []; }
+}
+
+function saveLogs(logs) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(logs));
+    return true;
+  } catch (e) {
+    console.error(e);
+    return false;
   }
 }
 
-/* TXT */
-txtInput.addEventListener("change", async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-
-  await sb.storage.from("logs").upload(Date.now()+"_"+file.name, file);
-  loadList();
-});
-
-/* ZIP */
+// ── ZIP処理 ──
 zipInput.addEventListener("change", async (e) => {
   const file = e.target.files[0];
   if (!file) return;
+  zipInput.value = "";
 
-  const zip = await JSZip.loadAsync(file);
+  showToast("読み込み中…");
 
-  for (const name in zip.files) {
-    const entry = zip.files[name];
-    if (entry.dir) continue;
+  try {
+    const zip = await JSZip.loadAsync(file);
+    const logs = loadLogs();
+    let added = 0;
+    let failed = 0;
 
-    if (entry.name.endsWith(".txt")) {
-      const blob = await entry.async("blob");
+    // 外側ZIPの中にある .zip を列挙
+    const innerZipNames = Object.keys(zip.files).filter(n => n.endsWith(".zip") && !zip.files[n].dir);
 
-      await sb.storage.from("logs").upload(
-        Date.now()+"_"+entry.name,
-        blob
-      );
+    if (innerZipNames.length === 0) {
+      // 直接TXTが入ってる場合も対応
+      const txtNames = Object.keys(zip.files).filter(n => n.endsWith(".txt"));
+      for (const name of txtNames) {
+        const content = await zip.files[name].async("string");
+        const title = name.split("/").pop();
+        saveEntry(logs, title, content) ? added++ : failed++;
+      }
+    } else {
+      for (const innerName of innerZipNames) {
+        try {
+          const innerBlob = await zip.files[innerName].async("blob");
+          const innerZip  = await JSZip.loadAsync(innerBlob);
+          const title     = innerName.split("/").pop(); // 内側ZIP名をタイトルに
+
+          // TXTを全部結合
+          const txtKeys = Object.keys(innerZip.files).filter(n => n.endsWith(".txt"));
+          let content = "";
+          for (const tk of txtKeys) {
+            const t = await innerZip.files[tk].async("string");
+            content += (content ? "\n\n---\n\n" : "") + t;
+          }
+
+          if (content) {
+            saveEntry(logs, title, content) ? added++ : failed++;
+          }
+        } catch {
+          failed++;
+        }
+      }
     }
-  }
 
-  loadList();
+    const ok = saveLogs(logs);
+    if (!ok) {
+      showToast("ストレージ容量が不足", "error");
+    } else if (added > 0) {
+      showToast(`${added}件保存完了${failed ? "（" + failed + "件失敗）" : ""}`, "success");
+    } else {
+      showToast("保存できるファイルがなかった", "error");
+    }
+
+    renderList();
+  } catch (err) {
+    console.error(err);
+    showToast("ZIP読み込み失敗", "error");
+  }
 });
 
-/* 一覧 */
-async function loadList() {
-  sidebar.innerHTML = "";
+function saveEntry(logs, title, content) {
+  try {
+    // 同じタイトルがあれば上書き
+    const idx = logs.findIndex(l => l.title === title);
+    const entry = { title, content, savedAt: new Date().toISOString() };
+    if (idx >= 0) logs[idx] = entry;
+    else logs.unshift(entry);
+    return true;
+  } catch { return false; }
+}
 
-  const { data, error } = await sb.storage.from("logs").list();
+// ── 一覧表示 ──
+let activeIndex = -1;
 
-  if (error) {
-    alert(error.message);
+function renderList() {
+  const logs = loadLogs();
+  const list = document.getElementById("file-list");
+
+  if (logs.length === 0) {
+    list.innerHTML = '<div class="sidebar-empty">まだ保存されてない<br>ZIPを読み込んでみて</div>';
     return;
   }
 
-  data.forEach(file => {
+  list.innerHTML = "";
+  logs.forEach((log, i) => {
     const div = document.createElement("div");
-    div.className = "file-item";
-    div.textContent = file.name;
+    div.className = "file-item" + (i === activeIndex ? " active" : "");
 
-    div.onclick = async () => {
-      const { data } = sb.storage.from("logs").getPublicUrl(file.name);
-      const res = await fetch(data.publicUrl);
-      viewer.textContent = await res.text();
-      toggleMenu();
+    const dateStr = log.savedAt
+      ? new Date(log.savedAt).toLocaleDateString("ja-JP", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })
+      : "";
+
+    div.innerHTML = `
+      <div class="file-name">${escHtml(log.title)}</div>
+      <div class="file-date">${dateStr}</div>
+    `;
+
+    div.onclick = () => {
+      activeIndex = i;
+      openLog(log);
+      closeMenu();
+      renderList();
     };
 
-    sidebar.appendChild(div);
+    list.appendChild(div);
   });
 }
-</script>
 
+function openLog(log) {
+  const viewer = document.getElementById("viewer");
+  document.getElementById("topbar-title").textContent = log.title;
+  viewer.innerHTML = "";
+
+  const pre = document.createElement("div");
+  pre.className = "viewer";
+  pre.textContent = log.content;
+  viewer.appendChild(pre);
+
+  // 上にスクロール
+  document.querySelector(".main").scrollTop = 0;
+}
+
+function clearAll() {
+  if (!confirm("全ての保存ログを削除する？")) return;
+  localStorage.removeItem(STORAGE_KEY);
+  activeIndex = -1;
+  document.getElementById("topbar-title").textContent = "AI会話ログ";
+  document.getElementById("viewer").innerHTML = `
+    <div class="placeholder">
+      <div class="placeholder-icon">📂</div>
+      <div class="placeholder-text">ZIPを読み込むと<br>会話ログが表示される</div>
+    </div>`;
+  renderList();
+  showToast("全削除完了", "success");
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+</script>
 </body>
 </html>
