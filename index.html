@@ -18,7 +18,6 @@
 }
 html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: 'Noto Sans JP', sans-serif; font-size: 14px; -webkit-font-smoothing: antialiased; }
 
-/* ── パスワード ── */
 #pw-screen { position: fixed; inset: 0; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; z-index: 9999; transition: opacity 0.3s; }
 #pw-screen.hidden { opacity: 0; pointer-events: none; }
 .pw-logo { font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 4px; color: var(--accent2); text-transform: uppercase; }
@@ -32,7 +31,6 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 .pw-btn:active { opacity: 0.8; }
 .pw-err { font-size: 12px; color: var(--error); text-align: center; height: 16px; }
 
-/* ── トップバー ── */
 .topbar { position: fixed; top: 0; left: 0; right: 0; height: var(--topbar); background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 10px; gap: 8px; z-index: 100; }
 .menu-btn { width: 36px; height: 36px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 5px; cursor: pointer; flex-shrink: 0; border-radius: 6px; }
 .menu-btn span { display: block; width: 18px; height: 2px; background: var(--text); border-radius: 2px; transition: 0.3s; }
@@ -45,19 +43,16 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 .btn:active { background: var(--border); }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 
-/* ── サイドバー ── */
 .sidebar-overlay { position: fixed; inset: 0; top: var(--topbar); background: rgba(0,0,0,0.5); z-index: 90; opacity: 0; pointer-events: none; transition: opacity 0.25s; }
 .sidebar-overlay.open { opacity: 1; pointer-events: all; }
 .sidebar { position: fixed; top: var(--topbar); left: 0; width: min(290px, 85vw); height: calc(100% - var(--topbar)); background: var(--surface); border-right: 1px solid var(--border); overflow: hidden; z-index: 95; transform: translateX(-100%); transition: transform 0.25s cubic-bezier(0.4,0,0.2,1); display: flex; flex-direction: column; }
 .sidebar.open { transform: translateX(0); }
 
-/* 検索 */
 .search-box { padding: 10px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
 .search-input { width: 100%; padding: 8px 12px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 13px; font-family: 'Noto Sans JP', sans-serif; outline: none; }
 .search-input:focus { border-color: var(--accent); }
 
-/* フィルタータブ */
-.filter-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); flex-shrink: 0; overflow-x: auto; scrollbar-width: none; }
+.filter-tabs { display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0; overflow-x: auto; scrollbar-width: none; }
 .filter-tabs::-webkit-scrollbar { display: none; }
 .ftab { padding: 8px 10px; font-size: 11px; cursor: pointer; color: var(--muted); white-space: nowrap; border-bottom: 2px solid transparent; transition: color 0.2s, border-color 0.2s; flex-shrink: 0; }
 .ftab.active { color: var(--text); border-bottom-color: var(--accent); }
@@ -74,18 +69,15 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 .file-item.active .file-name { color: var(--accent2); }
 .file-date { font-size: 10px; color: var(--muted); font-family: 'JetBrains Mono', monospace; }
 
-/* AI色 */
-.ai-chatgpt { background: rgba(16,163,127,0.15); color: var(--chatgpt); }
-.ai-grok    { background: rgba(29,155,240,0.15); color: var(--grok); }
-.ai-deepseek{ background: rgba(79,142,247,0.15); color: var(--deepseek); }
-.ai-claude  { background: rgba(201,100,66,0.15); color: var(--claude); }
-.ai-dola    { background: rgba(224,64,251,0.15); color: var(--dola); }
-.ai-other   { background: rgba(113,113,122,0.15); color: var(--muted); }
+.ai-chatgpt  { background: rgba(16,163,127,0.15); color: var(--chatgpt); }
+.ai-grok     { background: rgba(29,155,240,0.15); color: var(--grok); }
+.ai-deepseek { background: rgba(79,142,247,0.15); color: var(--deepseek); }
+.ai-claude   { background: rgba(201,100,66,0.15); color: var(--claude); }
+.ai-dola     { background: rgba(224,64,251,0.15); color: var(--dola); }
+.ai-other    { background: rgba(113,113,122,0.15); color: var(--muted); }
 
-/* ── メイン ── */
 .main { position: fixed; top: var(--topbar); left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; }
 
-/* ページナビ */
 .page-nav { flex-shrink: 0; background: var(--surface); border-bottom: 1px solid var(--border); display: none; align-items: center; justify-content: space-between; padding: 8px 14px; gap: 10px; }
 .page-nav.show { display: flex; }
 .nav-btn { width: 36px; height: 36px; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: background 0.2s; }
@@ -95,14 +87,12 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 .page-title { font-size: 11px; color: var(--muted); text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .viewer-wrap { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
-
 .viewer { padding: 16px 14px 40px; font-size: 13px; line-height: 1.9; color: var(--text); }
 
 .placeholder { height: 100%; min-height: calc(100vh - var(--topbar)); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--muted); padding: 40px 20px; text-align: center; }
 .placeholder-icon { font-size: 36px; opacity: 0.4; }
 .placeholder-text { font-size: 14px; line-height: 1.7; }
 
-/* 会話ページ */
 .msg-block { margin-bottom: 18px; }
 .msg-user { background: var(--surface2); border-radius: 10px; padding: 12px 14px; }
 .msg-user-label { font-size: 10px; color: var(--accent2); font-family: 'JetBrains Mono', monospace; margin-bottom: 6px; letter-spacing: 1px; }
@@ -110,10 +100,6 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 .msg-ai-label { font-size: 10px; margin-bottom: 6px; font-family: 'JetBrains Mono', monospace; letter-spacing: 1px; }
 .msg-text { white-space: pre-wrap; word-break: break-word; font-size: 13px; line-height: 1.85; }
 
-/* 検索ハイライト */
-.highlight { background: rgba(124,106,247,0.35); border-radius: 2px; }
-
-/* ── トースト ── */
 #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px); background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 10px 18px; border-radius: 8px; font-size: 13px; z-index: 999; transition: transform 0.3s, opacity 0.3s; opacity: 0; white-space: nowrap; max-width: 88vw; overflow: hidden; text-overflow: ellipsis; }
 #toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
 #toast.success { border-color: var(--success); color: var(--success); }
@@ -126,7 +112,6 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 </head>
 <body>
 
-<!-- パスワード -->
 <div id="pw-screen">
   <div class="pw-logo">AI LOG VIEWER</div>
   <div class="pw-title">パスワードを入力</div>
@@ -137,37 +122,34 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
   </div>
 </div>
 
-<!-- トップバー -->
 <div class="topbar">
   <div class="menu-btn" id="menu-btn" onclick="toggleMenu()"><span></span><span></span><span></span></div>
   <div class="topbar-title" id="topbar-title">AI会話ログ</div>
   <div class="topbar-actions">
-    <input type="file" id="zipInput" accept=".zip" hidden>
+    <input type="file" id="zipInput" accept=".zip" multiple hidden>
     <button class="btn primary" onclick="document.getElementById('zipInput').click()">ZIP</button>
     <button class="btn" onclick="clearAll()">全削除</button>
   </div>
 </div>
 
-<!-- サイドバー -->
 <div class="sidebar-overlay" id="overlay" onclick="closeMenu()"></div>
 <div class="sidebar" id="sidebar">
   <div class="search-box">
     <input class="search-input" id="search-input" placeholder="🔍 タイトル・内容を検索…" oninput="onSearch()">
   </div>
-  <div class="filter-tabs" id="filter-tabs">
-    <div class="ftab active" data-ai="all" onclick="setFilter('all')">すべて</div>
-    <div class="ftab" data-ai="chatgpt" onclick="setFilter('chatgpt')"><span class="dot" style="background:var(--chatgpt)"></span>ChatGPT</div>
-    <div class="ftab" data-ai="grok" onclick="setFilter('grok')"><span class="dot" style="background:var(--grok)"></span>Grok</div>
+  <div class="filter-tabs">
+    <div class="ftab active" data-ai="all"      onclick="setFilter('all')">すべて</div>
+    <div class="ftab" data-ai="chatgpt"  onclick="setFilter('chatgpt')"><span class="dot" style="background:var(--chatgpt)"></span>ChatGPT</div>
+    <div class="ftab" data-ai="grok"     onclick="setFilter('grok')"><span class="dot" style="background:var(--grok)"></span>Grok</div>
     <div class="ftab" data-ai="deepseek" onclick="setFilter('deepseek')"><span class="dot" style="background:var(--deepseek)"></span>DeepSeek</div>
-    <div class="ftab" data-ai="claude" onclick="setFilter('claude')"><span class="dot" style="background:var(--claude)"></span>Claude</div>
-    <div class="ftab" data-ai="dola" onclick="setFilter('dola')"><span class="dot" style="background:var(--dola)"></span>Dola</div>
+    <div class="ftab" data-ai="claude"   onclick="setFilter('claude')"><span class="dot" style="background:var(--claude)"></span>Claude</div>
+    <div class="ftab" data-ai="dola"     onclick="setFilter('dola')"><span class="dot" style="background:var(--dola)"></span>Dola</div>
   </div>
   <div class="file-list-wrap">
     <div id="file-list"></div>
   </div>
 </div>
 
-<!-- メイン -->
 <div class="main">
   <div class="page-nav" id="page-nav">
     <button class="nav-btn" id="btn-prev" onclick="changePage(-1)">←</button>
@@ -190,68 +172,54 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 <div id="toast"></div>
 
 <script>
-// ══════════════════════════
-// 設定
-// ══════════════════════════
 const PASS         = "ai-shinan";
 const SUPABASE_URL = "https://mtprohzzgfdohlxvfpwl.supabase.co";
 const SUPABASE_KEY = "sb_publishable_9jqBvmC7d8VxewxbzAHeYA_SoTmobit";
 const TABLE        = "logs";
 
-// AI判別
+// ── AI判別（CG- = ChatGPT）──
 const AI_RULES = [
-  { key: "chatgpt",  prefixes: ["GC-"],    label: "ChatGPT", cssClass: "ai-chatgpt" },
-  { key: "grok",     prefixes: ["Grok-"],  label: "Grok",    cssClass: "ai-grok" },
-  { key: "deepseek", prefixes: ["DS-"],    label: "DeepSeek",cssClass: "ai-deepseek" },
-  { key: "claude",   prefixes: ["C-"],     label: "Claude",  cssClass: "ai-claude" },
-  { key: "dola",     prefixes: ["Dola-"],  label: "Dola",    cssClass: "ai-dola" },
+  { key: "chatgpt",  prefix: "CG-",   label: "ChatGPT",  cssClass: "ai-chatgpt" },
+  { key: "grok",     prefix: "Grok-", label: "Grok",     cssClass: "ai-grok" },
+  { key: "deepseek", prefix: "DS-",   label: "DeepSeek", cssClass: "ai-deepseek" },
+  { key: "claude",   prefix: "C-",    label: "Claude",   cssClass: "ai-claude" },
+  { key: "dola",     prefix: "Dola-", label: "Dola",     cssClass: "ai-dola" },
 ];
 
 function detectAI(title) {
-  for (const rule of AI_RULES) {
-    if (rule.prefixes.some(p => title.startsWith(p))) return rule;
+  for (const r of AI_RULES) {
+    if (title.startsWith(r.prefix)) return r;
   }
   return { key: "other", label: "Other", cssClass: "ai-other" };
 }
 
-// ══════════════════════════
-// Supabase
-// ══════════════════════════
-const SB_HEADERS = {
+function aiInfo(key) {
+  return AI_RULES.find(r => r.key === key) || { key: "other", label: "Other", cssClass: "ai-other" };
+}
+
+// ── Supabase ──
+const SB_H = {
   "Content-Type": "application/json",
   "apikey": SUPABASE_KEY,
   "Authorization": `Bearer ${SUPABASE_KEY}`
 };
 
-async function sbFetch(path, options = {}) {
-  const url = `${SUPABASE_URL}/rest/v1/${path}`;
-  const res = await fetch(url, {
-    ...options,
-    headers: { ...SB_HEADERS, ...(options.headers || {}) }
+async function sbFetch(path, opts = {}) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    ...opts, headers: { ...SB_H, ...(opts.headers || {}) }
   });
   if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
   if (res.status === 204) return null;
   const ct = res.headers.get("content-type") || "";
-  if (ct.includes("json")) return res.json();
-  return null;
+  return ct.includes("json") ? res.json() : null;
 }
 
-async function sbGetAll() {
-  return await sbFetch(`${TABLE}?select=id,title,ai_type,created_at&order=created_at.desc`) || [];
-}
-
-async function sbGetOne(id) {
-  const rows = await sbFetch(`${TABLE}?id=eq.${id}&select=title,content,ai_type`) || [];
-  return rows[0] || null;
-}
-
-async function sbSearch(q) {
-  const enc = encodeURIComponent(q);
-  return await sbFetch(`${TABLE}?or=(title.ilike.*${enc}*,content.ilike.*${enc}*)&select=id,title,ai_type,created_at&order=created_at.desc`) || [];
-}
+const sbGetAll  = () => sbFetch(`${TABLE}?select=id,title,ai_type,created_at&order=created_at.desc`).then(r => r || []);
+const sbGetOne  = id => sbFetch(`${TABLE}?id=eq.${id}&select=title,content,ai_type`).then(r => r?.[0] || null);
+const sbSearch  = q  => sbFetch(`${TABLE}?or=(title.ilike.*${encodeURIComponent(q)}*,content.ilike.*${encodeURIComponent(q)}*)&select=id,title,ai_type,created_at&order=created_at.desc`).then(r => r || []);
 
 async function sbUpsert(title, content, ai_type) {
-  const existing = await sbFetch(`${TABLE}?title=eq.${encodeURIComponent(title)}&select=id`) || [];
+  const existing = await sbFetch(`${TABLE}?title=eq.${encodeURIComponent(title)}&select=id`).then(r => r || []);
   if (existing.length > 0) {
     await sbFetch(`${TABLE}?id=eq.${existing[0].id}`, {
       method: "PATCH",
@@ -267,40 +235,27 @@ async function sbUpsert(title, content, ai_type) {
   }
 }
 
-async function sbDeleteAll() {
-  await sbFetch(`${TABLE}?id=gt.0`, {
-    method: "DELETE",
-    headers: { "Prefer": "return=minimal" }
-  });
-}
+const sbDeleteAll = () => sbFetch(`${TABLE}?id=gt.0`, { method: "DELETE", headers: { "Prefer": "return=minimal" } });
 
-// ══════════════════════════
-// パスワード
-// ══════════════════════════
-document.getElementById("pw-input").addEventListener("keydown", e => {
-  if (e.key === "Enter") checkPassword();
-});
+// ── パスワード ──
+document.getElementById("pw-input").addEventListener("keydown", e => { if (e.key === "Enter") checkPassword(); });
 
 function checkPassword() {
-  const v = document.getElementById("pw-input").value;
+  const inp = document.getElementById("pw-input");
   const err = document.getElementById("pw-err");
-  if (v === PASS) {
+  if (inp.value === PASS) {
     const s = document.getElementById("pw-screen");
     s.classList.add("hidden");
     setTimeout(() => s.style.display = "none", 300);
     loadList();
   } else {
     err.textContent = "パスワードが違う";
-    const inp = document.getElementById("pw-input");
-    inp.classList.add("error");
-    inp.value = "";
+    inp.classList.add("error"); inp.value = "";
     setTimeout(() => { inp.classList.remove("error"); err.textContent = ""; }, 1500);
   }
 }
 
-// ══════════════════════════
-// UI
-// ══════════════════════════
+// ── UI ──
 let menuOpen = false;
 function toggleMenu() {
   menuOpen = !menuOpen;
@@ -310,97 +265,87 @@ function toggleMenu() {
 }
 function closeMenu() {
   menuOpen = false;
-  document.getElementById("sidebar").classList.remove("open");
-  document.getElementById("overlay").classList.remove("open");
-  document.getElementById("menu-btn").classList.remove("open");
+  ["sidebar","overlay","menu-btn"].forEach(id => document.getElementById(id).classList.remove("open"));
 }
 
 let toastTimer;
 function showToast(msg, type = "") {
   const t = document.getElementById("toast");
-  t.textContent = msg;
-  t.className = "show " + type;
+  t.textContent = msg; t.className = "show " + type;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => t.className = "", 2800);
 }
 
-// ══════════════════════════
-// ZIP処理（フォルダ構造対応）
-// ══════════════════════════
+// ── ZIP処理（複数対応・フォルダ→TXTのみ）──
 document.getElementById("zipInput").addEventListener("change", async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
+  const files = Array.from(e.target.files);
+  if (!files.length) return;
   e.target.value = "";
-  showToast("読み込み中…");
+  showToast(`${files.length}件のZIPを読み込み中…`);
 
-  try {
-    const zip = await JSZip.loadAsync(file);
-    const entries = zip.files;
+  let totalAdded = 0, totalFailed = 0;
 
-    // フォルダを列挙（末尾が / のエントリ、またはパスにスラッシュを含むファイルから親フォルダを抽出）
-    const folderMap = {}; // folderName -> [txtContent, ...]
-
-    for (const [path, entry] of Object.entries(entries)) {
-      if (entry.dir) continue;
-      if (!path.endsWith(".txt")) continue;
-
-      const parts = path.split("/");
-      let folderName, fileName;
-
-      if (parts.length >= 2) {
-        // フォルダ/ファイル.txt の構造
-        folderName = parts[0];
-        fileName   = parts[parts.length - 1];
-      } else {
-        // ルート直下のtxt
-        folderName = "__root__";
-        fileName   = parts[0];
-      }
-
-      if (!folderMap[folderName]) folderMap[folderName] = [];
-      const content = await entry.async("string");
-      folderMap[folderName].push({ fileName, content });
+  for (const file of files) {
+    try {
+      const { added, failed } = await processZip(file);
+      totalAdded += added;
+      totalFailed += failed;
+    } catch (err) {
+      console.error(file.name, err);
+      totalFailed++;
     }
-
-    let added = 0, failed = 0;
-
-    for (const [folderName, txts] of Object.entries(folderMap)) {
-      try {
-        const title = folderName === "__root__"
-          ? (txts[0]?.fileName || "unknown")
-          : folderName;
-
-        // 複数txtは結合
-        txts.sort((a, b) => a.fileName.localeCompare(b.fileName));
-        const content = txts.map(t => t.content).join("\n\n---\n\n");
-
-        const aiRule = detectAI(title);
-        await sbUpsert(title, content, aiRule.key);
-        added++;
-      } catch (err) {
-        console.error("upsert error:", err);
-        failed++;
-      }
-    }
-
-    if (added > 0) {
-      showToast(`${added}件保存完了${failed ? `（${failed}件失敗）` : ""}`, "success");
-    } else {
-      showToast("保存できるファイルがなかった", "error");
-    }
-    await loadList();
-  } catch (err) {
-    console.error(err);
-    showToast("ZIP読み込み失敗: " + err.message, "error");
   }
+
+  if (totalAdded > 0) {
+    showToast(`${totalAdded}件保存完了${totalFailed ? `（${totalFailed}件失敗）` : ""}`, "success");
+  } else {
+    showToast("保存できるファイルがなかった", "error");
+  }
+  await loadList();
 });
 
-// ══════════════════════════
-// 一覧・フィルター・検索
-// ══════════════════════════
-let allRows   = [];
-let curFilter = "all";
-let activeId  = null;
+async function processZip(file) {
+  const zip = await JSZip.loadAsync(file);
+  const entries = zip.files;
+
+  // フォルダ名 → TXTリスト のマップを作る
+  // ZIPファイル（.zip）は無視、TXTのみ対象
+  const folderMap = {};
+
+  for (const [path, entry] of Object.entries(entries)) {
+    if (entry.dir) continue;
+    if (!path.endsWith(".txt")) continue; // TXTのみ
+
+    const parts = path.split("/").filter(Boolean);
+    const folderName = parts.length >= 2 ? parts[0] : "__root__";
+    const fileName   = parts[parts.length - 1];
+
+    if (!folderMap[folderName]) folderMap[folderName] = [];
+    const content = await entry.async("string");
+    folderMap[folderName].push({ fileName, content });
+  }
+
+  let added = 0, failed = 0;
+
+  for (const [folderName, txts] of Object.entries(folderMap)) {
+    try {
+      const title = folderName === "__root__" ? txts[0]?.fileName.replace(".txt","") : folderName;
+      txts.sort((a, b) => a.fileName.localeCompare(b.fileName));
+      const content = txts.map(t => t.content).join("\n\n---\n\n");
+      const ai = detectAI(title);
+      await sbUpsert(title, content, ai.key);
+      added++;
+    } catch (err) {
+      console.error("upsert error:", err);
+      failed++;
+    }
+  }
+
+  return { added, failed };
+}
+
+// ── 一覧・フィルター・検索 ──
+let allRows = [], curFilter = "all", activeId = null;
 
 async function loadList() {
   document.getElementById("file-list").innerHTML = '<div class="sidebar-empty">読み込み中…</div>';
@@ -423,19 +368,14 @@ function onSearch() {
   clearTimeout(searchTimer);
   searchTimer = setTimeout(async () => {
     const q = document.getElementById("search-input").value.trim();
-    if (q.length === 0) {
-      allRows = await sbGetAll();
-    } else {
-      allRows = await sbSearch(q);
-    }
+    allRows = q.length > 0 ? await sbSearch(q) : await sbGetAll();
     renderList();
   }, 350);
 }
 
 function renderList() {
   const list = document.getElementById("file-list");
-  let rows = allRows;
-  if (curFilter !== "all") rows = rows.filter(r => r.ai_type === curFilter);
+  let rows = curFilter === "all" ? allRows : allRows.filter(r => r.ai_type === curFilter);
 
   if (rows.length === 0) {
     list.innerHTML = '<div class="sidebar-empty">該当なし</div>';
@@ -444,14 +384,12 @@ function renderList() {
 
   list.innerHTML = "";
   rows.forEach(row => {
-    const ai  = AI_RULES.find(r => r.key === row.ai_type) || { label: "Other", cssClass: "ai-other" };
+    const ai  = aiInfo(row.ai_type);
     const div = document.createElement("div");
     div.className = "file-item" + (row.id === activeId ? " active" : "");
-
     const dateStr = row.created_at
-      ? new Date(row.created_at).toLocaleDateString("ja-JP", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })
+      ? new Date(row.created_at).toLocaleDateString("ja-JP", { month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit" })
       : "";
-
     div.innerHTML = `
       <div class="file-item-top">
         <span class="ai-badge ${ai.cssClass}">${ai.label}</span>
@@ -459,20 +397,17 @@ function renderList() {
       </div>
       <div class="file-date">${dateStr}</div>
     `;
-    div.onclick = () => { activeId = row.id; openLog(row.id, row.title); closeMenu(); renderList(); };
+    div.onclick = () => { activeId = row.id; openLog(row.id, row.title, row.ai_type); closeMenu(); renderList(); };
     list.appendChild(div);
   });
 }
 
-// ══════════════════════════
-// 会話表示・ページ分割
-// ══════════════════════════
-let pages    = [];
-let curPage  = 0;
-let curTitle = "";
+// ── 会話表示・ページ分割 ──
+let pages = [], curPage = 0, curTitle = "", curAiLabel = "";
 
-async function openLog(id, title) {
-  curTitle = title;
+async function openLog(id, title, aiType) {
+  curTitle   = title;
+  curAiLabel = aiInfo(aiType).label;
   document.getElementById("topbar-title").textContent = title;
   document.getElementById("viewer").innerHTML = '<div class="placeholder"><div class="placeholder-icon">⏳</div><div class="placeholder-text">読み込み中…</div></div>';
   document.getElementById("page-nav").classList.remove("show");
@@ -480,8 +415,7 @@ async function openLog(id, title) {
   try {
     const data = await sbGetOne(id);
     if (!data) { showToast("データなし", "error"); return; }
-
-    pages   = splitPages(data.content);
+    pages  = splitPages(data.content);
     curPage = 0;
     renderPage();
   } catch (err) {
@@ -489,95 +423,72 @@ async function openLog(id, title) {
   }
 }
 
-// 「私：」で区切ってページ配列を作る
 function splitPages(raw) {
-  if (!raw) return [{ user: null, ai: raw || "" }];
+  if (!raw) return [{ user: null, ai: "" }];
 
-  // 「私：」または「私:」で分割
+  // 「私：」または「私:」の前で分割
   const parts = raw.split(/(?=私[：:])/).filter(s => s.trim());
-
-  if (parts.length <= 1) {
-    // 区切りがない場合はそのまま1ページ
-    return [{ user: null, ai: raw }];
-  }
+  if (parts.length <= 1) return [{ user: null, ai: raw }];
 
   return parts.map(part => {
-    const sep = part.match(/私[：:]/);
-    if (!sep) return { user: null, ai: part.trim() };
+    const m = part.match(/^私[：:]/);
+    if (!m) return { user: null, ai: part.trim() };
 
-    const idx     = part.indexOf(sep[0]);
-    const userRaw = part.slice(idx + sep[0].length);
-
-    // ユーザー発言の終わりを探す（次の長い空白 or AIっぽい返答の開始）
-    // シンプルに：最初の改行2個以降をAI返答とする
-    const nlIdx = userRaw.indexOf("\n\n");
-    if (nlIdx < 0) return { user: userRaw.trim(), ai: "" };
-
-    return {
-      user: userRaw.slice(0, nlIdx).trim(),
-      ai:   userRaw.slice(nlIdx + 2).trim()
-    };
+    const body  = part.slice(m[0].length);
+    const nlIdx = body.indexOf("\n\n");
+    if (nlIdx < 0) return { user: body.trim(), ai: "" };
+    return { user: body.slice(0, nlIdx).trim(), ai: body.slice(nlIdx + 2).trim() };
   });
 }
 
 function renderPage() {
-  const nav  = document.getElementById("page-nav");
-  const wrap = document.getElementById("viewer-wrap");
-
-  if (pages.length === 0) {
-    document.getElementById("viewer").innerHTML = '<div class="placeholder"><div class="placeholder-text">内容なし</div></div>';
-    nav.classList.remove("show");
-    return;
-  }
+  const nav = document.getElementById("page-nav");
+  if (pages.length === 0) { nav.classList.remove("show"); return; }
 
   nav.classList.add("show");
-  document.getElementById("page-info").textContent = `${curPage + 1} / ${pages.length}`;
+  document.getElementById("page-info").textContent     = `${curPage + 1} / ${pages.length}`;
   document.getElementById("page-title-nav").textContent = curTitle;
   document.getElementById("btn-prev").disabled = curPage === 0;
   document.getElementById("btn-next").disabled = curPage === pages.length - 1;
 
-  const page    = pages[curPage];
-  const viewer  = document.getElementById("viewer");
-  const aiLabel = AI_RULES.find(r => allRows.find(row => row.id === activeId)?.ai_type === r.key)?.label || "AI";
-
+  const page   = pages[curPage];
+  const viewer = document.getElementById("viewer");
   viewer.innerHTML = "";
+
   const div = document.createElement("div");
   div.className = "viewer";
 
   if (page.user !== null) {
-    const userBlock = document.createElement("div");
-    userBlock.className = "msg-block msg-user";
-    userBlock.innerHTML = `<div class="msg-user-label">私</div><div class="msg-text">${escHtml(page.user)}</div>`;
-    div.appendChild(userBlock);
+    const ub = document.createElement("div");
+    ub.className = "msg-block msg-user";
+    ub.innerHTML = `<div class="msg-user-label">私</div><div class="msg-text">${escHtml(page.user)}</div>`;
+    div.appendChild(ub);
   }
 
   if (page.ai) {
-    const aiBlock = document.createElement("div");
-    aiBlock.className = "msg-block msg-ai";
-    aiBlock.innerHTML = `<div class="msg-ai-label" style="color:var(--accent2)">${escHtml(aiLabel)}</div><div class="msg-text">${escHtml(page.ai)}</div>`;
-    div.appendChild(aiBlock);
+    const ab = document.createElement("div");
+    ab.className = "msg-block msg-ai";
+    ab.innerHTML = `<div class="msg-ai-label" style="color:var(--accent2)">${escHtml(curAiLabel)}</div><div class="msg-text">${escHtml(page.ai)}</div>`;
+    div.appendChild(ab);
   }
 
   viewer.appendChild(div);
-  wrap.scrollTop = 0;
+  document.getElementById("viewer-wrap").scrollTop = 0;
 }
 
 function changePage(dir) {
-  const next = curPage + dir;
-  if (next < 0 || next >= pages.length) return;
-  curPage = next;
+  const n = curPage + dir;
+  if (n < 0 || n >= pages.length) return;
+  curPage = n;
   renderPage();
 }
 
-// キーボード操作（PC用）
 document.addEventListener("keydown", e => {
   if (e.key === "ArrowLeft")  changePage(-1);
   if (e.key === "ArrowRight") changePage(1);
 });
 
-// ══════════════════════════
-// 全削除
-// ══════════════════════════
+// ── 全削除 ──
 async function clearAll() {
   if (!confirm("全ての保存ログを削除する？")) return;
   try {
