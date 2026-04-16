@@ -200,21 +200,21 @@ const RETRY_MAX    = 3;
 const RETRY_DELAY  = 600;
 const PAGE_SIZE    = 1000;
 
-// ★★★ 修正：prefixes を配列で持つ ★★★
+// ★★★ 完全に修正した AI 判定ルール ★★★
 const AI_RULES = [
-  { key: "chatgpt",  prefixes: ["CG-"],              label: "ChatGPT",  cssClass: "ai-chatgpt" },
-  { key: "grok",     prefixes: ["Grok-", "X1-Grok-"], label: "Grok",    cssClass: "ai-grok" },
-  { key: "deepseek", prefixes: ["DS-"],              label: "DeepSeek", cssClass: "ai-deepseek" },
-  { key: "claude",   prefixes: ["C-"],               label: "Claude",   cssClass: "ai-claude" },
-  { key: "dola",     prefixes: ["Dola-"],            label: "Dola",     cssClass: "ai-dola" },
+  { key: "chatgpt",  patterns: [/^CG-/i],                                      label: "ChatGPT",  cssClass: "ai-chatgpt" },
+  { key: "grok",     patterns: [/^Grok-/i, /^X\d+-Grok-/i],                    label: "Grok",     cssClass: "ai-grok" },
+  { key: "deepseek", patterns: [/^DS-/i],                                      label: "DeepSeek", cssClass: "ai-deepseek" },
+  { key: "claude",   patterns: [/^C-/i],                                       label: "Claude",   cssClass: "ai-claude" },
+  { key: "dola",     patterns: [/^Dola-/i],                                    label: "Dola",     cssClass: "ai-dola" },
 ];
 
-// ★★★ 修正：正しくプレフィックスを検出する関数 ★★★
+// ★★★ 正規表現で判定する堅牢な detectAI ★★★
 function detectAI(title) {
   if (!title) return { key: "other", label: "Other", cssClass: "ai-other" };
   for (const r of AI_RULES) {
-    for (const prefix of r.prefixes) {
-      if (title.startsWith(prefix)) {
+    for (const pattern of r.patterns) {
+      if (pattern.test(title)) {
         return r;
       }
     }
@@ -431,7 +431,7 @@ async function extractEntries(file) {
     const fileName = parts[parts.length - 1];
     const title = fileName.replace(/\.txt$/i, "");
     const content = await entry.async("string");
-    const ai = detectAI(title); // ★ここで正しく Grok 判定される
+    const ai = detectAI(title); // ★ 正規表現で X1-Grok-, X2-Grok- もヒット
 
     entries.push({ title, content, ai_type: ai.key });
   }
