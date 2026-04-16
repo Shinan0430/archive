@@ -65,10 +65,13 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 .ftab.active { color: var(--text); border-bottom-color: var(--accent); }
 .ftab .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
 
-.file-list-wrap { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.file-list-wrap { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; display: flex; flex-direction: column; }
 .sidebar-empty { padding: 24px 16px; color: var(--muted); font-size: 13px; text-align: center; line-height: 1.8; }
-.load-more { padding: 14px; text-align: center; color: var(--accent2); font-size: 12px; cursor: pointer; border-top: 1px solid var(--border); }
-.load-more:active { opacity: 0.7; }
+.list-pagination { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px; border-top: 1px solid var(--border); flex-shrink: 0; }
+.list-page-btn { width: 32px; height: 32px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.list-page-btn:active { background: var(--border); }
+.list-page-btn:disabled { opacity: 0.3; cursor: default; }
+.list-page-info { font-size: 11px; color: var(--muted); font-family: 'JetBrains Mono', monospace; min-width: 60px; text-align: center; }
 
 .file-item { padding: 12px 14px; border-bottom: 1px solid var(--border); cursor: pointer; display: flex; flex-direction: column; gap: 4px; transition: background 0.15s; }
 .file-item:active, .file-item.active { background: var(--surface2); }
@@ -150,7 +153,7 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 <div class="sidebar-overlay" id="overlay" onclick="closeMenu()"></div>
 <div class="sidebar" id="sidebar">
   <div class="search-box">
-    <input class="search-input" id="search-input" placeholder="🔍 タイトルを検索…" oninput="onSearch()">
+    <input class="search-input" id="search-input" placeholder="🔍 タイトルを検索…">
   </div>
   <div class="filter-tabs">
     <div class="ftab active" data-ai="all"      onclick="setFilter('all')">すべて</div>
@@ -161,7 +164,8 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
     <div class="ftab" data-ai="dola"     onclick="setFilter('dola')"><span class="dot" style="background:var(--dola)"></span>Dola</div>
   </div>
   <div class="file-list-wrap" id="file-list-wrap">
-    <div id="file-list"></div>
+    <div id="file-list" style="flex:1"></div>
+    <div class="list-pagination" id="list-pagination"></div>
   </div>
 </div>
 
@@ -194,21 +198,38 @@ const TABLE        = "logs";
 const BATCH_SIZE   = 5;
 const RETRY_MAX    = 3;
 const RETRY_DELAY  = 600;
-const PAGE_SIZE    = 200; // 一覧の1回の取得件数
+const PAGE_SIZE    = 1000; // 1ページあたりの表示件数
 
 const AI_RULES = [
-  { key: "chatgpt",  prefix: "CG-",   label: "ChatGPT",  cssClass: "ai-chatgpt" },
-  { key: "grok",     prefix: "Grok-", label: "Grok",     cssClass: "ai-grok" },
-  { key: "deepseek", prefix: "DS-",   label: "DeepSeek", cssClass: "ai-deepseek" },
-  { key: "claude",   prefix: "C-",    label: "Claude",   cssClass: "ai-claude" },
-  { key: "dola",     prefix: "Dola-", label: "Dola",     cssClass: "ai-dola" },
+  { key: "chatgpt",  prefixes: ["CG-"],           label: "ChatGPT",  cssClass: "ai-chatgpt" },
+  { key: "grok",     prefixes: ["Grok-", "X1-Grok-"], label: "Grok", cssClass: "ai-grok" },
+  { key: "deepseek", prefixes: ["DS-"],           label: "DeepSeek", cssClass: "ai-deepseek" },
+  { key: "claude",   prefixes: ["C-"],            label: "Claude",   cssClass: "ai-claude" },
+  { key: "dola",     prefixes: ["Dola-"],         label: "Dola",     cssClass: "ai-dola" },
 ];
+
 function detectAI(title) {
-  for (const r of AI_RULES) { if (title.startsWith(r.prefix)) return r; }
+  for (const r of AI_RULES) {
+    for (const prefix of r.prefixes) {
+      if (title.startsWith(prefix)) return r;
+    }
+  }
   return { key: "other", label: "Other", cssClass: "ai-other" };
 }
+
 function aiInfo(key) {
   return AI_RULES.find(r => r.key === key) || { key: "other", label: "Other", cssClass: "ai-other" };
+}
+
+// ファイル名から数字を抽出してソート用の値を生成
+function extractSortKey(title) {
+  const match = title.match(/(\d+)/g);
+  if (!match) return 0;
+  // 最後の数字を優先的に使用（例: X1-Grok-001 → 1）
+  const lastNum = parseInt(match[match.length - 1], 10);
+  // 最初の数字も考慮（例: X1-Grok-001 → 1と1）
+  const firstNum = match.length > 1 ? parseInt(match[0], 10) : 0;
+  return firstNum * 10000 + lastNum;
 }
 
 // ── Supabase ──
@@ -228,32 +249,20 @@ async function sbFetch(path, opts = {}) {
   return ct.includes("json") ? res.json() : null;
 }
 
-// 全件取得（1000件制限を回避するページネーション）
-async function sbGetAll(filter = "all", searchQ = "") {
+// 全件取得
+async function sbGetAll() {
   let allRows = [];
-  let offset  = 0;
+  let offset = 0;
 
   while (true) {
-    let path = `${TABLE}?select=id,title,ai_type,created_at&order=created_at.desc&limit=${PAGE_SIZE}&offset=${offset}`;
-
-    // フィルター
-    if (filter !== "all") {
-      path += `&ai_type=eq.${filter}`;
-    }
-
-    const rows = await sbFetch(path) || [];
+    const rows = await sbFetch(`${TABLE}?select=id,title,ai_type,created_at&limit=1000&offset=${offset}`) || [];
     allRows = allRows.concat(rows);
-
-    if (rows.length < PAGE_SIZE) break; // 最後のページ
-    offset += PAGE_SIZE;
+    if (rows.length < 1000) break;
+    offset += 1000;
   }
 
-  // 検索はクライアント側でフィルタ（Supabaseのilike日本語問題を回避）
-  if (searchQ) {
-    const q = searchQ.toLowerCase();
-    allRows = allRows.filter(r => r.title.toLowerCase().includes(q));
-  }
-
+  // 数字順でソート
+  allRows.sort((a, b) => extractSortKey(a.title) - extractSortKey(b.title));
   return allRows;
 }
 
@@ -264,12 +273,10 @@ async function sbGetOne(id) {
 
 const sbDeleteAll = () => sbFetch(`${TABLE}?id=gt.0`, { method: "DELETE", headers: { "Prefer": "return=minimal" } });
 
-// 既存タイトルキャッシュ
 let titleCache = null;
 
 async function ensureTitleCache() {
   if (titleCache !== null) return;
-  // 全タイトルをページネーションで取得
   let all = [], offset = 0;
   while (true) {
     const rows = await sbFetch(`${TABLE}?select=id,title&limit=1000&offset=${offset}`) || [];
@@ -388,7 +395,6 @@ document.getElementById("zipInput").addEventListener("change", async (e) => {
     return;
   }
 
-  // キャッシュリセット
   titleCache = null;
   await ensureTitleCache();
 
@@ -413,7 +419,6 @@ document.getElementById("zipInput").addEventListener("change", async (e) => {
   await loadList();
 });
 
-// フォルダ内のTXTファイル名（拡張子なし）をタイトルにする
 async function extractEntries(file) {
   const zip = await JSZip.loadAsync(file);
   const entries = [];
@@ -421,81 +426,85 @@ async function extractEntries(file) {
   for (const [path, entry] of Object.entries(zip.files)) {
     if (entry.dir || !path.endsWith(".txt")) continue;
 
-    const parts    = path.split("/").filter(Boolean);
-    const fileName = parts[parts.length - 1]; // 例: CG-20240101.txt
-    // .txt を除いたファイル名をタイトルに
-    const title    = fileName.replace(/\.txt$/i, "");
-    const content  = await entry.async("string");
-    const ai       = detectAI(title);
+    const parts = path.split("/").filter(Boolean);
+    const fileName = parts[parts.length - 1];
+    const title = fileName.replace(/\.txt$/i, "");
+    const content = await entry.async("string");
+    const ai = detectAI(title);
 
     entries.push({ title, content, ai_type: ai.key });
   }
   return entries;
 }
 
-// ── 一覧（クライアント側で全件保持・フィルタ・検索）──
-let allRows    = [];
-let curFilter  = "all";
-let searchQ    = "";
-let activeId   = null;
-let listOffset = 0;
-const LIST_CHUNK = 100; // 一度に描画する件数
+// ── 一覧表示（ページネーション付き）──
+let allRows = [];
+let filteredRows = [];
+let curFilter = "all";
+let searchQ = "";
+let activeId = null;
+let currentListPage = 0;
+let totalListPages = 0;
 
 async function loadList() {
   document.getElementById("file-list").innerHTML = '<div class="sidebar-empty">読み込み中…</div>';
+  document.getElementById("list-pagination").innerHTML = '';
   try {
-    allRows    = await sbGetAll("all", "");
-    listOffset = 0;
-    applyFilterAndRender();
+    allRows = await sbGetAll();
+    applyFilterAndSearch();
   } catch (err) {
     document.getElementById("file-list").innerHTML = `<div class="sidebar-empty">読み込み失敗<br><small>${err.message}</small></div>`;
   }
 }
 
 function setFilter(ai) {
-  curFilter  = ai;
-  listOffset = 0;
+  curFilter = ai;
   document.querySelectorAll(".ftab").forEach(t => t.classList.toggle("active", t.dataset.ai === ai));
-  applyFilterAndRender();
+  applyFilterAndSearch();
 }
 
-let searchTimer;
-function onSearch() {
-  clearTimeout(searchTimer);
-  searchTimer = setTimeout(() => {
-    searchQ    = document.getElementById("search-input").value.trim();
-    listOffset = 0;
-    applyFilterAndRender();
-  }, 200);
-}
+// 検索機能（リアルタイム）
+document.getElementById("search-input").addEventListener("input", (e) => {
+  searchQ = e.target.value.trim();
+  applyFilterAndSearch();
+});
 
-function getFilteredRows() {
+function applyFilterAndSearch() {
+  // フィルタリング
   let rows = allRows;
-  if (curFilter !== "all") rows = rows.filter(r => r.ai_type === curFilter);
+  if (curFilter !== "all") {
+    rows = rows.filter(r => r.ai_type === curFilter);
+  }
+  
+  // 検索（タイトル部分一致）
   if (searchQ) {
     const q = searchQ.toLowerCase();
     rows = rows.filter(r => r.title.toLowerCase().includes(q));
   }
-  return rows;
+  
+  filteredRows = rows;
+  currentListPage = 0;
+  totalListPages = Math.ceil(filteredRows.length / PAGE_SIZE);
+  
+  renderListPage();
+  renderListPagination();
 }
 
-function applyFilterAndRender() {
-  const rows = getFilteredRows();
+function renderListPage() {
   const list = document.getElementById("file-list");
   list.innerHTML = "";
-
-  if (rows.length === 0) {
+  
+  if (filteredRows.length === 0) {
     list.innerHTML = '<div class="sidebar-empty">該当なし</div>';
     return;
   }
-
-  renderChunk(rows, 0, list);
-}
-
-function renderChunk(rows, offset, list) {
-  const chunk = rows.slice(offset, offset + LIST_CHUNK);
-  chunk.forEach(row => {
-    const ai  = aiInfo(row.ai_type);
+  
+  const start = currentListPage * PAGE_SIZE;
+  const end = Math.min(start + PAGE_SIZE, filteredRows.length);
+  const pageRows = filteredRows.slice(start, end);
+  
+  pageRows.forEach(row => {
+    const ai = aiInfo(row.ai_type);
     const div = document.createElement("div");
     div.className = "file-item" + (row.id === activeId ? " active" : "");
     const dateStr = row.created_at
@@ -507,22 +516,38 @@ function renderChunk(rows, offset, list) {
         <span class="file-name">${escHtml(row.title)}</span>
       </div>
       <div class="file-date">${dateStr}</div>`;
-    div.onclick = () => { activeId = row.id; openLog(row.id, row.title, row.ai_type); closeMenu(); applyFilterAndRender(); };
+    div.onclick = () => { 
+      activeId = row.id; 
+      openLog(row.id, row.title, row.ai_type); 
+      closeMenu(); 
+      renderListPage(); // アクティブ状態を更新
+    };
     list.appendChild(div);
   });
+}
 
-  // まだ残りがあれば「もっと見る」ボタン
-  const nextOffset = offset + LIST_CHUNK;
-  if (nextOffset < rows.length) {
-    const more = document.createElement("div");
-    more.className = "load-more";
-    more.textContent = `さらに表示（残り${rows.length - nextOffset}件）`;
-    more.onclick = () => {
-      more.remove();
-      renderChunk(rows, nextOffset, list);
-    };
-    list.appendChild(more);
+function renderListPagination() {
+  const pagination = document.getElementById("list-pagination");
+  if (filteredRows.length <= PAGE_SIZE) {
+    pagination.innerHTML = '';
+    return;
   }
+  
+  pagination.innerHTML = `
+    <button class="list-page-btn" onclick="changeListPage(-1)" ${currentListPage === 0 ? 'disabled' : ''}>←</button>
+    <span class="list-page-info">${currentListPage + 1} / ${totalListPages}</span>
+    <button class="list-page-btn" onclick="changeListPage(1)" ${currentListPage === totalListPages - 1 ? 'disabled' : ''}>→</button>
+  `;
+}
+
+function changeListPage(delta) {
+  const newPage = currentListPage + delta;
+  if (newPage < 0 || newPage >= totalListPages) return;
+  currentListPage = newPage;
+  renderListPage();
+  renderListPagination();
+  // リストの先頭にスクロール
+  document.getElementById("file-list-wrap").scrollTop = 0;
 }
 
 // ── 会話表示 ──
@@ -551,7 +576,7 @@ function splitPages(raw) {
   return parts.map(part => {
     const m = part.match(/^私[：:]/);
     if (!m) return { user: null, ai: part.trim() };
-    const body  = part.slice(m[0].length);
+    const body = part.slice(m[0].length);
     const nlIdx = body.indexOf("\n\n");
     if (nlIdx < 0) return { user: body.trim(), ai: "" };
     return { user: body.slice(0, nlIdx).trim(), ai: body.slice(nlIdx + 2).trim() };
@@ -562,12 +587,12 @@ function renderPage() {
   const nav = document.getElementById("page-nav");
   if (!pages.length) { nav.classList.remove("show"); return; }
   nav.classList.add("show");
-  document.getElementById("page-info").textContent      = `${curPage + 1} / ${pages.length}`;
+  document.getElementById("page-info").textContent = `${curPage + 1} / ${pages.length}`;
   document.getElementById("page-title-nav").textContent = curTitle;
   document.getElementById("btn-prev").disabled = curPage === 0;
   document.getElementById("btn-next").disabled = curPage === pages.length - 1;
 
-  const page   = pages[curPage];
+  const page = pages[curPage];
   const viewer = document.getElementById("viewer");
   viewer.innerHTML = "";
   const div = document.createElement("div");
@@ -604,11 +629,12 @@ async function clearAll() {
   if (!confirm("全ての保存ログを削除する？")) return;
   try {
     await sbDeleteAll();
-    titleCache = {}; activeId = null; pages = []; curPage = 0; allRows = [];
+    titleCache = {}; activeId = null; pages = []; curPage = 0; allRows = []; filteredRows = [];
     document.getElementById("topbar-title").textContent = "AI会話ログ";
     document.getElementById("viewer").innerHTML = `<div class="placeholder"><div class="placeholder-icon">📂</div><div class="placeholder-text">ZIPを読み込むと<br>会話ログが表示される</div></div>`;
     document.getElementById("page-nav").classList.remove("show");
     document.getElementById("file-list").innerHTML = '<div class="sidebar-empty">まだ保存されてない</div>';
+    document.getElementById("list-pagination").innerHTML = '';
     showToast("全削除完了", "success");
   } catch (err) {
     showToast("削除失敗: " + err.message, "error");
@@ -616,6 +642,7 @@ async function clearAll() {
 }
 
 function escHtml(s) {
+  if (!s) return '';
   return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
 }
 </script>
