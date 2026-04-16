@@ -224,24 +224,9 @@ async function sbFetch(path, opts = {}) {
   return ct.includes("json") ? res.json() : null;
 }
 
-async function sbFetchAll(path) {
-  let allData = [];
-  let offset = 0;
-  const limit = 1000;
-  while (true) {
-    const sep = path.includes("?") ? "&" : "?";
-    const res = await sbFetch(`${path}${sep}limit=${limit}&offset=${offset}`);
-    if (!res || res.length === 0) break;
-    allData = allData.concat(res);
-    if (res.length < limit) break;
-    offset += limit;
-  }
-  return allData;
-}
-
-const sbGetAll    = () => sbFetchAll(`${TABLE}?select=id,title,ai_type,created_at&order=created_at.desc`);
+const sbGetAll    = () => sbFetch(`${TABLE}?select=id,title,ai_type,created_at&order=created_at.desc`).then(r => r || []);
 const sbGetOne    = id => sbFetch(`${TABLE}?id=eq.${id}&select=title,content,ai_type`).then(r => r?.[0] || null);
-const sbSearch    = q  => sbFetchAll(`${TABLE}?or=(title.ilike.*${encodeURIComponent(q)}*,content.ilike.*${encodeURIComponent(q)}*)&select=id,title,ai_type,created_at&order=created_at.desc`);
+const sbSearch    = q  => sbFetch(`${TABLE}?or=(title.ilike.*${encodeURIComponent(q)}*,content.ilike.*${encodeURIComponent(q)}*)&select=id,title,ai_type,created_at&order=created_at.desc`).then(r => r || []);
 const sbDeleteAll = () => sbFetch(`${TABLE}?id=gt.0`, { method: "DELETE", headers: { "Prefer": "return=minimal" } });
 
 // 既存タイトル→IDのキャッシュ
@@ -249,7 +234,7 @@ let titleCache = null;
 
 async function ensureTitleCache() {
   if (titleCache !== null) return;
-  const rows = await sbFetchAll(`${TABLE}?select=id,title`);
+  const rows = await sbFetch(`${TABLE}?select=id,title`) || [];
   titleCache = {};
   for (const r of rows) titleCache[r.title] = r.id;
 }
@@ -398,4 +383,168 @@ async function extractEntries(file) {
   const zip = await JSZip.loadAsync(file);
   const folderMap = {};
   for (const [path, entry] of Object.entries(zip.files)) {
-    if (entry.dir || !path.endsWith(".txt")) contin
+    if (entry.dir || !path.endsWith(".txt")) continue;
+    const parts      = path.split("/").filter(Boolean);
+    const folderName = parts.length >= 2 ? parts[0] : "__root__";
+    const fileName   = parts[parts.length - 1];
+    if (!folderMap[folderName]) folderMap[folderName] = [];
+    const content = await entry.async("string");
+    folderMap[folderName].push({ fileName, content });
+  }
+  const entries = [];
+  for (const [folderName, txts] of Object.entries(folderMap)) {
+    const title = folderName === "__root__" ? txts[0]?.fileName.replace(".txt","") : folderName;
+    txts.sort((a, b) => a.fileName.localeCompare(b.fileName));
+    const content = txts.map(t => t.content).join("\n\n---\n\n");
+    entries.push({ title, content, ai_type: detectAI(title).key });
+  }
+  return entries;
+}
+
+// ── 一覧 ──
+let allRows = [], curFilter = "all", activeId = null;
+
+async function loadList() {
+  document.getElementById("file-list").innerHTML = '<div class="sidebar-empty">読み込み中…</div>';
+  try {
+    allRows = await sbGetAll();
+    renderList();
+  } catch (err) {
+    document.getElementById("file-list").innerHTML = `<div class="sidebar-empty">読み込み失敗<br><small>${err.message}</small></div>`;
+  }
+}
+
+function setFilter(ai) {
+  curFilter = ai;
+  document.querySelectorAll(".ftab").forEach(t => t.classList.toggle("active", t.dataset.ai === ai));
+  renderList();
+}
+
+let searchTimer;
+function onSearch() {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(async () => {
+    const q = document.getElementById("search-input").value.trim();
+    allRows = q ? await sbSearch(q) : await sbGetAll();
+    renderList();
+  }, 350);
+}
+
+function renderList() {
+  const list = document.getElementById("file-list");
+  const rows = curFilter === "all" ? allRows : allRows.filter(r => r.ai_type === curFilter);
+  if (rows.length === 0) { list.innerHTML = '<div class="sidebar-empty">該当なし</div>'; return; }
+  list.innerHTML = "";
+  rows.forEach(row => {
+    const ai  = aiInfo(row.ai_type);
+    const div = document.createElement("div");
+    div.className = "file-item" + (row.id === activeId ? " active" : "");
+    const dateStr = row.created_at
+      ? new Date(row.created_at).toLocaleDateString("ja-JP", { month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit" })
+      : "";
+    div.innerHTML = `
+      <div class="file-item-top">
+        <span class="ai-badge ${ai.cssClass}">${ai.label}</span>
+        <span class="file-name">${escHtml(row.title)}</span>
+      </div>
+      <div class="file-date">${dateStr}</div>`;
+    div.onclick = () => { activeId = row.id; openLog(row.id, row.title, row.ai_type); closeMenu(); renderList(); };
+    list.appendChild(div);
+  });
+}
+
+// ── 会話表示 ──
+let pages = [], curPage = 0, curTitle = "", curAiLabel = "";
+
+async function openLog(id, title, aiType) {
+  curTitle = title; curAiLabel = aiInfo(aiType).label;
+  document.getElementById("topbar-title").textContent = title;
+  document.getElementById("viewer").innerHTML = '<div class="placeholder"><div class="placeholder-icon">⏳</div><div class="placeholder-text">読み込み中…</div></div>';
+  document.getElementById("page-nav").classList.remove("show");
+  try {
+    const data = await sbGetOne(id);
+    if (!data) { showToast("データなし", "error"); return; }
+    pages = splitPages(data.content);
+    curPage = 0;
+    renderPage();
+  } catch (err) {
+    showToast("読み込み失敗: " + err.message, "error");
+  }
+}
+
+function splitPages(raw) {
+  if (!raw) return [{ user: null, ai: "" }];
+  const parts = raw.split(/(?=私[：:])/).filter(s => s.trim());
+  if (parts.length <= 1) return [{ user: null, ai: raw }];
+  return parts.map(part => {
+    const m = part.match(/^私[：:]/);
+    if (!m) return { user: null, ai: part.trim() };
+    const body  = part.slice(m[0].length);
+    const nlIdx = body.indexOf("\n\n");
+    if (nlIdx < 0) return { user: body.trim(), ai: "" };
+    return { user: body.slice(0, nlIdx).trim(), ai: body.slice(nlIdx + 2).trim() };
+  });
+}
+
+function renderPage() {
+  const nav = document.getElementById("page-nav");
+  if (!pages.length) { nav.classList.remove("show"); return; }
+  nav.classList.add("show");
+  document.getElementById("page-info").textContent      = `${curPage + 1} / ${pages.length}`;
+  document.getElementById("page-title-nav").textContent = curTitle;
+  document.getElementById("btn-prev").disabled = curPage === 0;
+  document.getElementById("btn-next").disabled = curPage === pages.length - 1;
+
+  const page = pages[curPage];
+  const viewer = document.getElementById("viewer");
+  viewer.innerHTML = "";
+  const div = document.createElement("div");
+  div.className = "viewer";
+  if (page.user !== null) {
+    const ub = document.createElement("div");
+    ub.className = "msg-block msg-user";
+    ub.innerHTML = `<div class="msg-user-label">私</div><div class="msg-text">${escHtml(page.user)}</div>`;
+    div.appendChild(ub);
+  }
+  if (page.ai) {
+    const ab = document.createElement("div");
+    ab.className = "msg-block msg-ai";
+    ab.innerHTML = `<div class="msg-ai-label" style="color:var(--accent2)">${escHtml(curAiLabel)}</div><div class="msg-text">${escHtml(page.ai)}</div>`;
+    div.appendChild(ab);
+  }
+  viewer.appendChild(div);
+  document.getElementById("viewer-wrap").scrollTop = 0;
+}
+
+function changePage(dir) {
+  const n = curPage + dir;
+  if (n < 0 || n >= pages.length) return;
+  curPage = n; renderPage();
+}
+document.addEventListener("keydown", e => {
+  if (e.key === "ArrowLeft") changePage(-1);
+  if (e.key === "ArrowRight") changePage(1);
+});
+
+// ── 全削除 ──
+async function clearAll() {
+  if (!confirm("全ての保存ログを削除する？")) return;
+  try {
+    await sbDeleteAll();
+    titleCache = {}; activeId = null; pages = []; curPage = 0; allRows = [];
+    document.getElementById("topbar-title").textContent = "AI会話ログ";
+    document.getElementById("viewer").innerHTML = `<div class="placeholder"><div class="placeholder-icon">📂</div><div class="placeholder-text">ZIPを読み込むと<br>会話ログが表示される</div></div>`;
+    document.getElementById("page-nav").classList.remove("show");
+    renderList();
+    showToast("全削除完了", "success");
+  } catch (err) {
+    showToast("削除失敗: " + err.message, "error");
+  }
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+</script>
+</body>
+</html>
