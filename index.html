@@ -91,11 +91,12 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 .main { position: fixed; top: var(--topbar); left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; transition: top 0.2s; }
 .main.with-progress { top: calc(var(--topbar) + 52px); }
 
-.page-nav { flex-shrink: 0; background: var(--surface); border-bottom: 1px solid var(--border); display: none; align-items: center; justify-content: space-between; padding: 8px 14px; gap: 10px; }
+.page-nav { flex-shrink: 0; background: var(--surface); border-bottom: 1px solid var(--border); display: none; align-items: center; justify-content: space-between; padding: 8px 10px; gap: 6px; }
 .page-nav.show { display: flex; }
-.nav-btn { width: 36px; height: 36px; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.nav-btn { width: 36px; height: 36px; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: background 0.15s; }
 .nav-btn:active { background: var(--border); }
 .nav-btn:disabled { opacity: 0.3; cursor: default; }
+.nav-btn.edge { font-size: 12px; }
 .page-info { font-size: 12px; color: var(--muted); text-align: center; flex: 1; font-family: 'JetBrains Mono', monospace; }
 .page-title { font-size: 11px; color: var(--muted); text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -170,15 +171,16 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 </div>
 
 <div class="main" id="main">
+  <!-- ナビバー: |← ← [ページ情報] → →| -->
   <div class="page-nav" id="page-nav">
-    <button class="nav-btn" id="btn-first" onclick="changePage('first')" title="最初">⏮</button>
-    <button class="nav-btn" id="btn-prev" onclick="changePage(-1)" title="前へ">←</button>
-    <div style="flex:1;text-align:center">
-      <div class="page-info" id="page-info"></div>
-      <div class="page-title" id="page-title-nav"></div>
+    <button class="nav-btn edge" id="btn-first" onclick="changePage('first')" title="最初のページ">|←</button>
+    <button class="nav-btn" id="btn-prev"  onclick="changePage(-1)"     title="前のページ">←</button>
+    <div style="flex:1;text-align:center;min-width:0">
+      <div class="page-info"      id="page-info"></div>
+      <div class="page-title"     id="page-title-nav"></div>
     </div>
-    <button class="nav-btn" id="btn-next" onclick="changePage(1)" title="次へ">→</button>
-    <button class="nav-btn" id="btn-last" onclick="changePage('last')" title="最後">⏭</button>
+    <button class="nav-btn" id="btn-next"  onclick="changePage(1)"      title="次のページ">→</button>
+    <button class="nav-btn edge" id="btn-last"  onclick="changePage('last')"  title="最後のページ">→|</button>
   </div>
   <div class="viewer-wrap" id="viewer-wrap">
     <div id="viewer">
@@ -200,16 +202,19 @@ const TABLE        = "logs";
 const BATCH_SIZE   = 5;
 const RETRY_MAX    = 3;
 const RETRY_DELAY  = 600;
-const PAGE_SIZE    = 1000;
+const LIST_PAGE_SIZE = 50; // サイドバー1ページあたりの件数
 
-// AI 判定ルール（Grok 拡張版: X数字-Grok / Grok- / 先頭Grok など完全対応）
+// AI 判定ルール
 const AI_RULES = [
-  { key: "chatgpt",  patterns: [/^CG-/i, /chatgpt/i],                         label: "ChatGPT",  cssClass: "ai-chatgpt" },
-  { key: "grok",     patterns: [/^(?:X\d+-)?Grok[-_ ]/i, /^Grok[-_ ]/i, /Grok/i], label: "Grok",  cssClass: "ai-grok" },
-  { key: "deepseek", patterns: [/^DS-/i, /deepseek/i],                         label: "DeepSeek", cssClass: "ai-deepseek" },
-  { key: "claude",   patterns: [/^C-/i, /claude/i],                            label: "Claude",   cssClass: "ai-claude" },
-  { key: "dola",     patterns: [/^Dola-/i, /dola/i],                           label: "Dola",     cssClass: "ai-dola" },
+  { key: "chatgpt",  patterns: [/^CG-/i, /chatgpt/i],                              label: "ChatGPT",  cssClass: "ai-chatgpt" },
+  { key: "grok",     patterns: [/^(?:X\d+-)?Grok[-_ ]/i, /^Grok[-_ ]/i, /Grok/i], label: "Grok",     cssClass: "ai-grok" },
+  { key: "deepseek", patterns: [/^DS-/i, /deepseek/i],                              label: "DeepSeek", cssClass: "ai-deepseek" },
+  { key: "claude",   patterns: [/^C-/i, /claude/i],                                 label: "Claude",   cssClass: "ai-claude" },
+  { key: "dola",     patterns: [/^Dola-/i, /dola/i],                                label: "Dola",     cssClass: "ai-dola" },
 ];
+
+// 「私：」の中でAI返答の区切りとなるラベル
+const AI_SPEAKER_LABELS = ["ChatGPT", "Grok", "Claude", "DeepSeek", "Dola"];
 
 function detectAI(title) {
   if (!title) return { key: "other", label: "Other", cssClass: "ai-other" };
@@ -230,12 +235,12 @@ function aiInfo(key) {
 function extractSortKey(title) {
   const matches = title.match(/(\d+)/g);
   if (!matches) return 0;
-  const lastNum = parseInt(matches[matches.length - 1], 10);
+  const lastNum  = parseInt(matches[matches.length - 1], 10);
   const firstNum = matches.length > 1 ? parseInt(matches[0], 10) : 0;
   return firstNum * 10000 + lastNum;
 }
 
-// Supabase
+// ── Supabase ──────────────────────────────────────────
 const SB_H = { "Content-Type": "application/json", "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` };
 async function sbFetch(path, opts = {}) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { ...opts, headers: { ...SB_H, ...(opts.headers || {}) } });
@@ -294,7 +299,7 @@ async function sbUpsertSafe(title, content, ai_type) {
   return false;
 }
 
-// パスワード
+// ── パスワード ─────────────────────────────────────────
 document.getElementById("pw-input").addEventListener("keydown", e => { if (e.key === "Enter") checkPassword(); });
 function checkPassword() {
   const inp = document.getElementById("pw-input");
@@ -311,7 +316,7 @@ function checkPassword() {
   }
 }
 
-// UI 状態
+// ── UI 状態 ────────────────────────────────────────────
 let menuOpen = false;
 function toggleMenu() {
   menuOpen = !menuOpen;
@@ -341,344 +346,326 @@ function hideProgress() {
   document.getElementById("main").classList.remove("with-progress");
 }
 
-// ファイルリスト + ページ送り (Viewer内ページング)
-let allFiles = [];
-let currentFileIndex = -1;
-let currentPage = 0;
-let pages = []; // 各ページは { aiType, content, rawTitle }
-
-// 会話をAI名で分割し、ページを生成する
-function parseConversation(content, rawTitle) {
-  const aiType = detectAI(rawTitle).key;
-  const lines = content.split('\n');
-  const pages = [];
-  let currentPage = { aiType, blocks: [], rawTitle };
-  let currentBlock = null; // { type: 'user' or 'ai', label: string, text: string }
-  
-  // AI名の正規表現（ラベル用）
-  const aiPatterns = [
-    { pattern: /^ChatGPT[：:]/i, label: 'ChatGPT' },
-    { pattern: /^Grok[：:]/i, label: 'Grok' },
-    { pattern: /^Claude[：:]/i, label: 'Claude' },
-    { pattern: /^DeepSeek[：:]/i, label: 'DeepSeek' },
-    { pattern: /^Dola[：:]/i, label: 'Dola' },
-    { pattern: /^私[：:]/i, label: '私' }
-  ];
-
-  for (let line of lines) {
-    // 空行はスキップ（ただしブロック内の改行は保持したいので工夫）
-    let matched = false;
-    for (let { pattern, label } of aiPatterns) {
-      const match = line.match(pattern);
-      if (match) {
-        // 新しいブロック開始
-        const text = line.substring(match[0].length).trim();
-        if (label === '私') {
-          // ユーザーブロック
-          if (currentBlock) {
-            currentPage.blocks.push(currentBlock);
-          }
-          // 新しいページを開始（私：で区切る）
-          if (currentPage.blocks.length > 0) {
-            pages.push(currentPage);
-            currentPage = { aiType, blocks: [], rawTitle };
-          }
-          currentBlock = { type: 'user', label: '私', text };
-        } else {
-          // AIブロック
-          if (currentBlock) {
-            currentPage.blocks.push(currentBlock);
-          }
-          currentBlock = { type: 'ai', label, text };
-        }
-        matched = true;
-        break;
-      }
-    }
-    if (!matched && currentBlock) {
-      // 継続行
-      currentBlock.text += '\n' + line;
-    } else if (!matched && !currentBlock) {
-      // 最初のラベルが出る前のテキスト（無視 or 最初のページに入れる）
-      if (currentPage.blocks.length === 0) {
-        currentBlock = { type: 'ai', label: aiInfo(aiType).label, text: line };
-      }
-    }
-  }
-  if (currentBlock) {
-    currentPage.blocks.push(currentBlock);
-  }
-  if (currentPage.blocks.length > 0) {
-    pages.push(currentPage);
-  }
-  
-  // 空のページを除去
-  return pages.filter(p => p.blocks.length > 0);
-}
-
-// 現在選択中のファイルのページを表示
-async function loadFileByIndex(index) {
-  if (index < 0 || index >= allFiles.length) return;
-  const file = allFiles[index];
-  currentFileIndex = index;
-  document.getElementById("topbar-title").textContent = file.title;
-  
-  // ハイライト更新
-  document.querySelectorAll('.file-item').forEach(el => el.classList.remove('active'));
-  const activeEl = document.querySelector(`.file-item[data-id="${file.id}"]`);
-  if (activeEl) activeEl.classList.add('active');
-  
-  // コンテンツ取得
-  showToast("読み込み中…");
-  try {
-    const data = await sbGetOne(file.id);
-    if (!data) throw new Error("データなし");
-    
-    pages = parseConversation(data.content, data.title);
-    currentPage = 0;
-    renderPage();
-    updateNavButtons();
-    document.getElementById("page-nav").classList.add("show");
-  } catch (e) {
-    showToast("読み込みエラー", "error");
-    console.error(e);
-  }
-  closeMenu();
-}
-
-function renderPage() {
-  const viewer = document.getElementById("viewer");
-  if (pages.length === 0) {
-    viewer.innerHTML = `<div class="placeholder"><div class="placeholder-icon">📄</div><div class="placeholder-text">会話がありません</div></div>`;
-    return;
-  }
-  const page = pages[currentPage];
-  let html = '';
-  for (const block of page.blocks) {
-    if (block.type === 'user') {
-      html += `<div class="msg-block"><div class="msg-user"><div class="msg-user-label">👤 ${block.label}</div><div class="msg-text">${escapeHtml(block.text)}</div></div></div>`;
-    } else {
-      const aiClass = `ai-${page.aiType}`;
-      html += `<div class="msg-block"><div class="msg-ai"><div class="msg-ai-label ${aiClass}" style="display:inline-block; padding:2px 8px; border-radius:4px;">🤖 ${block.label}</div><div class="msg-text">${escapeHtml(block.text)}</div></div></div>`;
-    }
-  }
-  viewer.innerHTML = html;
-  viewer.scrollTop = 0;
-  updateNavButtons();
-}
-
-function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML.replace(/\n/g, '<br>');
-}
-
-function updateNavButtons() {
-  const info = document.getElementById("page-info");
-  const titleNav = document.getElementById("page-title-nav");
-  const btnPrev = document.getElementById("btn-prev");
-  const btnNext = document.getElementById("btn-next");
-  const btnFirst = document.getElementById("btn-first");
-  const btnLast = document.getElementById("btn-last");
-  
-  if (pages.length === 0) {
-    info.textContent = `0 / 0`;
-    titleNav.textContent = allFiles[currentFileIndex]?.title || '';
-    btnPrev.disabled = true;
-    btnNext.disabled = true;
-    btnFirst.disabled = true;
-    btnLast.disabled = true;
-    return;
-  }
-  
-  info.textContent = `${currentPage + 1} / ${pages.length}`;
-  titleNav.textContent = allFiles[currentFileIndex]?.title || '';
-  btnPrev.disabled = currentPage === 0;
-  btnNext.disabled = currentPage === pages.length - 1;
-  btnFirst.disabled = currentPage === 0;
-  btnLast.disabled = currentPage === pages.length - 1;
-}
-
-function changePage(delta) {
-  if (pages.length === 0) return;
-  let newPage = currentPage;
-  if (delta === 'first') newPage = 0;
-  else if (delta === 'last') newPage = pages.length - 1;
-  else newPage = currentPage + delta;
-  
-  if (newPage >= 0 && newPage < pages.length) {
-    currentPage = newPage;
-    renderPage();
-  }
-}
-
-// ファイルリスト表示
+// ── サイドバー ファイルリスト ──────────────────────────
+let allFiles      = [];
 let filteredFiles = [];
-let listPage = 0;
-const LIST_PAGE_SIZE = 50;
-let currentFilter = 'all';
-let searchQuery = '';
+let listPage      = 0;
+let currentFilter = "all";
+let currentSearch = "";
+let activeFileId  = null;
 
-function filterAndSearch() {
-  const q = searchQuery.toLowerCase();
+async function loadList() {
+  try {
+    allFiles = await sbGetAll();
+    applyFilter();
+  } catch(e) {
+    showToast("読み込み失敗: " + e.message, "error");
+  }
+}
+
+function applyFilter() {
+  const q = currentSearch.trim().toLowerCase();
   filteredFiles = allFiles.filter(f => {
-    if (currentFilter !== 'all' && f.ai_type !== currentFilter) return false;
-    if (q && !f.title.toLowerCase().includes(q)) return false;
-    return true;
+    const aiMatch = currentFilter === "all" || f.ai_type === currentFilter;
+    const textMatch = !q || f.title.toLowerCase().includes(q);
+    return aiMatch && textMatch;
   });
   listPage = 0;
   renderFileList();
 }
 
-function setFilter(ai) {
-  currentFilter = ai;
-  document.querySelectorAll('.ftab').forEach(t => t.classList.remove('active'));
-  document.querySelector(`.ftab[data-ai="${ai}"]`).classList.add('active');
-  filterAndSearch();
+function setFilter(key) {
+  currentFilter = key;
+  document.querySelectorAll(".ftab").forEach(el => el.classList.toggle("active", el.dataset.ai === key));
+  applyFilter();
 }
+
+document.getElementById("search-input").addEventListener("input", e => {
+  currentSearch = e.target.value;
+  applyFilter();
+});
 
 function renderFileList() {
-  const container = document.getElementById("file-list");
-  const pagination = document.getElementById("list-pagination");
-  const totalPages = Math.ceil(filteredFiles.length / LIST_PAGE_SIZE);
+  const wrap = document.getElementById("file-list");
+  const pageTotal = Math.ceil(filteredFiles.length / LIST_PAGE_SIZE) || 1;
   const start = listPage * LIST_PAGE_SIZE;
-  const end = Math.min(start + LIST_PAGE_SIZE, filteredFiles.length);
-  const pageFiles = filteredFiles.slice(start, end);
-  
+  const slice = filteredFiles.slice(start, start + LIST_PAGE_SIZE);
+
   if (filteredFiles.length === 0) {
-    container.innerHTML = `<div class="sidebar-empty">ファイルがありません</div>`;
-    pagination.innerHTML = '';
+    wrap.innerHTML = `<div class="sidebar-empty">ファイルがない</div>`;
+  } else {
+    wrap.innerHTML = slice.map(f => {
+      const ai = aiInfo(f.ai_type);
+      const date = f.created_at ? f.created_at.slice(0,10) : "";
+      return `<div class="file-item${f.id === activeFileId ? ' active' : ''}" onclick="openFile(${f.id})">
+        <div class="file-item-top">
+          <span class="ai-badge ${ai.cssClass}">${ai.label}</span>
+          <span class="file-name">${escHtml(f.title)}</span>
+        </div>
+        <div class="file-date">${date}</div>
+      </div>`;
+    }).join("");
+  }
+
+  // サイドバーページネーション
+  const pg = document.getElementById("list-pagination");
+  if (pageTotal <= 1) { pg.innerHTML = ""; return; }
+  pg.innerHTML = `
+    <button class="list-page-btn" onclick="listPageMove(-1)" ${listPage===0?"disabled":""}>←</button>
+    <span class="list-page-info">${listPage+1} / ${pageTotal}</span>
+    <button class="list-page-btn" onclick="listPageMove(1)"  ${listPage>=pageTotal-1?"disabled":""}>→</button>`;
+}
+
+function listPageMove(d) {
+  const pageTotal = Math.ceil(filteredFiles.length / LIST_PAGE_SIZE) || 1;
+  listPage = Math.max(0, Math.min(pageTotal - 1, listPage + d));
+  renderFileList();
+}
+
+// ── ファイルを開く & ページ解析 ───────────────────────
+let pages       = [];  // 各要素: { userText, turns: [{speaker, text}] }
+let currentPage = 0;
+let currentFileTitle = "";
+
+async function openFile(id) {
+  activeFileId = id;
+  renderFileList();
+  closeMenu();
+  try {
+    const row = await sbGetOne(id);
+    if (!row) { showToast("データなし", "error"); return; }
+    currentFileTitle = row.title;
+    document.getElementById("topbar-title").textContent = row.title;
+    pages = parsePages(row.content);
+    currentPage = 0;
+    renderPage();
+  } catch(e) {
+    showToast("読み込み失敗: " + e.message, "error");
+  }
+}
+
+/**
+ * テキストを「私：」ブロックでページ分割する。
+ *
+ * 各「私：」ブロック内で「ChatGPT：」「Grok：」「Claude：」「DeepSeek：」「Dola：」
+ * という行があればそこでAI返答の区切りとして扱い、
+ * 直前のテキストを「私」の発言、以降をそのAIの返答として記録する。
+ *
+ * 構造例:
+ *   私：
+ *   ○○について教えて
+ *   ChatGPT：
+ *   ...返答...
+ *   Grok：
+ *   ...返答...
+ *
+ * → page.userText = "○○について教えて"
+ *    page.turns = [{speaker:"ChatGPT", text:"..."}, {speaker:"Grok", text:"..."}]
+ */
+function parsePages(content) {
+  if (!content) return [];
+
+  const lines = content.split("\n");
+  // 「私：」で始まる行のインデックスを探す
+  const watashiPattern = /^私[：:]\s*/;
+  const aiSpeakerPattern = new RegExp(`^(${AI_SPEAKER_LABELS.join("|")})[：:]\\s*`);
+
+  // まず「私：」の行でブロック分割
+  const blocks = [];
+  let cur = null;
+  for (let i = 0; i < lines.length; i++) {
+    if (watashiPattern.test(lines[i])) {
+      if (cur !== null) blocks.push(cur);
+      cur = { startLine: i, lines: [lines[i]] };
+    } else if (cur !== null) {
+      cur.lines.push(lines[i]);
+    }
+    // 「私：」より前の行は無視（前書きなどがある場合）
+  }
+  if (cur !== null) blocks.push(cur);
+
+  if (blocks.length === 0) {
+    // 「私：」がないファイルは1ページで全文表示
+    return [{ userText: content, turns: [] }];
+  }
+
+  return blocks.map(block => {
+    // ブロック内の行リスト
+    const bLines = block.lines;
+    // 最初の行は「私：xxx」→ userText の冒頭
+    const firstLine = bLines[0].replace(watashiPattern, "");
+
+    const turns = [];
+    let userParts = firstLine ? [firstLine] : [];
+    let currentSpeaker = null;
+    let currentTurnLines = [];
+
+    for (let i = 1; i < bLines.length; i++) {
+      const m = bLines[i].match(aiSpeakerPattern);
+      if (m) {
+        // 前のターンを確定
+        if (currentSpeaker !== null) {
+          turns.push({ speaker: currentSpeaker, text: currentTurnLines.join("\n").trim() });
+        } else {
+          // AI区切り前のテキストはuserPartsに追加
+          const extra = userParts.concat(currentTurnLines).join("\n").trim();
+          userParts = extra ? [extra] : [];
+        }
+        currentSpeaker = m[1];
+        const remainder = bLines[i].replace(aiSpeakerPattern, "").trim();
+        currentTurnLines = remainder ? [remainder] : [];
+      } else {
+        if (currentSpeaker !== null) {
+          currentTurnLines.push(bLines[i]);
+        } else {
+          userParts.push(bLines[i]);
+        }
+      }
+    }
+    // 最後のターンを確定
+    if (currentSpeaker !== null) {
+      turns.push({ speaker: currentSpeaker, text: currentTurnLines.join("\n").trim() });
+    } else if (currentTurnLines.length > 0) {
+      userParts = userParts.concat(currentTurnLines);
+    }
+
+    return {
+      userText: userParts.join("\n").trim(),
+      turns
+    };
+  });
+}
+
+// ── ページ描画 ────────────────────────────────────────
+function renderPage() {
+  const nav = document.getElementById("page-nav");
+  if (pages.length === 0) {
+    nav.classList.remove("show");
+    document.getElementById("viewer").innerHTML = `<div class="placeholder"><div class="placeholder-icon">📄</div><div class="placeholder-text">内容がない</div></div>`;
     return;
   }
-  
-  let html = '';
-  for (const f of pageFiles) {
-    const ai = aiInfo(f.ai_type);
-    const date = f.created_at ? new Date(f.created_at).toLocaleDateString('ja-JP') : '';
-    const activeClass = (currentFileIndex !== -1 && allFiles[currentFileIndex]?.id === f.id) ? 'active' : '';
-    html += `<div class="file-item ${activeClass}" data-id="${f.id}" onclick="loadFileById(${f.id})">
-      <div class="file-item-top"><span class="ai-badge ${ai.cssClass}">${ai.label}</span><span class="file-name">${escapeHtml(f.title)}</span></div>
-      <div class="file-date">${date}</div>
+
+  nav.classList.add("show");
+  const p = pages[currentPage];
+
+  // ナビ情報更新
+  document.getElementById("page-info").textContent = `${currentPage + 1} / ${pages.length}`;
+  document.getElementById("page-title-nav").textContent = currentFileTitle;
+
+  // ボタン状態
+  document.getElementById("btn-first").disabled = currentPage === 0;
+  document.getElementById("btn-prev").disabled  = currentPage === 0;
+  document.getElementById("btn-next").disabled  = currentPage === pages.length - 1;
+  document.getElementById("btn-last").disabled  = currentPage === pages.length - 1;
+
+  // HTML構築
+  let html = "";
+
+  // 私の発言
+  if (p.userText) {
+    html += `<div class="msg-block">
+      <div class="msg-user">
+        <div class="msg-user-label">私</div>
+        <div class="msg-text">${escHtml(p.userText)}</div>
+      </div>
     </div>`;
   }
-  container.innerHTML = html;
-  
-  // ページネーション
-  let pagHtml = '';
-  pagHtml += `<button class="list-page-btn" onclick="changeListPage(-1)" ${listPage === 0 ? 'disabled' : ''}>←</button>`;
-  pagHtml += `<span class="list-page-info">${listPage+1} / ${totalPages}</span>`;
-  pagHtml += `<button class="list-page-btn" onclick="changeListPage(1)" ${listPage >= totalPages-1 ? 'disabled' : ''}>→</button>`;
-  pagination.innerHTML = pagHtml;
-}
 
-function changeListPage(delta) {
-  const totalPages = Math.ceil(filteredFiles.length / LIST_PAGE_SIZE);
-  const newPage = listPage + delta;
-  if (newPage >= 0 && newPage < totalPages) {
-    listPage = newPage;
-    renderFileList();
+  // AI返答ターン
+  for (const turn of p.turns) {
+    const ai = AI_RULES.find(r => r.label === turn.speaker) || { cssClass: "ai-other", label: turn.speaker };
+    html += `<div class="msg-block">
+      <div class="msg-ai">
+        <div class="msg-ai-label ${ai.cssClass}">${escHtml(turn.speaker)}</div>
+        <div class="msg-text">${escHtml(turn.text)}</div>
+      </div>
+    </div>`;
   }
-}
 
-async function loadFileById(id) {
-  const index = allFiles.findIndex(f => f.id === id);
-  if (index !== -1) await loadFileByIndex(index);
-}
-
-async function loadList() {
-  showToast("リスト取得中…");
-  try {
-    allFiles = await sbGetAll();
-    // ai_type 補完
-    allFiles.forEach(f => { if (!f.ai_type) f.ai_type = detectAI(f.title).key; });
-    filterAndSearch();
-    if (allFiles.length > 0) {
-      await loadFileByIndex(0);
-    }
-  } catch (e) {
-    showToast("リスト取得エラー", "error");
+  // ターンがない（区切りなし）かつ userText だけの場合は全文表示
+  if (!p.userText && p.turns.length === 0) {
+    html = `<div class="viewer"><div class="msg-text">${escHtml("")}</div></div>`;
   }
+
+  document.getElementById("viewer").innerHTML = `<div class="viewer">${html}</div>`;
+  document.getElementById("viewer-wrap").scrollTop = 0;
 }
 
-// ZIP処理
-document.getElementById('zipInput').addEventListener('change', async (e) => {
+function changePage(dir) {
+  if (pages.length === 0) return;
+  if (dir === "first") currentPage = 0;
+  else if (dir === "last") currentPage = pages.length - 1;
+  else currentPage = Math.max(0, Math.min(pages.length - 1, currentPage + dir));
+  renderPage();
+}
+
+// ── ZIP読み込み ────────────────────────────────────────
+document.getElementById("zipInput").addEventListener("change", async e => {
   const files = Array.from(e.target.files);
-  if (files.length === 0) return;
-  
-  showProgress(0, 1);
-  const zip = new JSZip();
-  let totalFiles = 0;
-  const entries = [];
-  
+  e.target.value = "";
+  if (!files.length) return;
+  let allEntries = [];
   for (const file of files) {
     try {
-      const content = await file.arrayBuffer();
-      const z = await zip.loadAsync(content);
-      const txtFiles = Object.keys(z.files).filter(name => name.endsWith('.txt') && !z.files[name].dir);
-      for (const name of txtFiles) {
-        const text = await z.files[name].async("string");
-        entries.push({ title: name, content: text });
-      }
-    } catch (err) {
-      showToast(`ZIPエラー: ${file.name}`, "error");
+      const zip = await JSZip.loadAsync(file);
+      zip.forEach((path, entry) => {
+        if (!entry.dir && /\.(txt|md|log)$/i.test(path)) allEntries.push({ path, entry });
+      });
+    } catch(err) {
+      showToast(`ZIP読み込み失敗: ${file.name}`, "error");
     }
   }
-  
-  totalFiles = entries.length;
-  if (totalFiles === 0) {
-    hideProgress();
-    showToast("テキストファイルが見つかりません", "error");
-    e.target.value = '';
-    return;
+  if (!allEntries.length) { showToast("対象ファイルなし", "error"); return; }
+
+  let done = 0, failed = 0;
+  showProgress(0, allEntries.length);
+  titleCache = null;
+  await ensureTitleCache();
+
+  for (let i = 0; i < allEntries.length; i += BATCH_SIZE) {
+    const batch = allEntries.slice(i, i + BATCH_SIZE);
+    await Promise.all(batch.map(async ({ path, entry }) => {
+      const text = await entry.async("string");
+      const name = path.split("/").pop();
+      const title = name.replace(/\.(txt|md|log)$/i, "");
+      const ai = detectAI(name);
+      const ok = await sbUpsertSafe(title, text, ai.key);
+      if (!ok) failed++;
+      done++;
+      showProgress(done, allEntries.length);
+    }));
   }
-  
-  showProgress(0, totalFiles);
-  let success = 0;
-  for (let i = 0; i < entries.length; i++) {
-    const e = entries[i];
-    const ai = detectAI(e.title);
-    const ok = await sbUpsertSafe(e.title, e.content, ai.key);
-    if (ok) success++;
-    showProgress(i + 1, totalFiles);
-  }
-  
+
   hideProgress();
-  showToast(`${success} / ${totalFiles} 件保存`, success === totalFiles ? "success" : "error");
-  e.target.value = '';
+  showToast(failed ? `完了（失敗${failed}件）` : `${done}件保存完了`, failed ? "error" : "success");
   await loadList();
 });
 
+// ── 全削除 ────────────────────────────────────────────
 async function clearAll() {
-  if (!confirm('すべての会話ログを削除しますか？')) return;
-  showToast("削除中…");
+  if (!confirm("全データを削除しますか？")) return;
   try {
     await sbDeleteAll();
-    titleCache = null;
-    allFiles = [];
-    filteredFiles = [];
-    pages = [];
-    currentFileIndex = -1;
-    currentPage = 0;
-    document.getElementById("viewer").innerHTML = `<div class="placeholder"><div class="placeholder-icon">📂</div><div class="placeholder-text">ZIPを読み込むと<br>会話ログが表示される</div></div>`;
-    document.getElementById("page-nav").classList.remove("show");
-    document.getElementById("topbar-title").textContent = "AI会話ログ";
+    allFiles = []; filteredFiles = []; titleCache = null;
+    activeFileId = null; pages = []; currentPage = 0;
     renderFileList();
-    showToast("削除完了", "success");
-  } catch (e) {
-    showToast("削除エラー", "error");
+    document.getElementById("page-nav").classList.remove("show");
+    document.getElementById("viewer").innerHTML = `<div class="placeholder"><div class="placeholder-icon">📂</div><div class="placeholder-text">ZIPを読み込むと<br>会話ログが表示される</div></div>`;
+    document.getElementById("topbar-title").textContent = "AI会話ログ";
+    showToast("全削除完了", "success");
+  } catch(e) {
+    showToast("削除失敗: " + e.message, "error");
   }
 }
 
-// 検索
-document.getElementById("search-input").addEventListener("input", (e) => {
-  searchQuery = e.target.value;
-  filterAndSearch();
-});
-
-// 初期化
-window.onload = () => {
-  // パスワード画面表示
-};
+// ── ユーティリティ ────────────────────────────────────
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
 </script>
 </body>
 </html>
