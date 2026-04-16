@@ -68,10 +68,10 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 .file-list-wrap { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; display: flex; flex-direction: column; }
 .sidebar-empty { padding: 24px 16px; color: var(--muted); font-size: 13px; text-align: center; line-height: 1.8; }
 .list-pagination { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px; border-top: 1px solid var(--border); flex-shrink: 0; }
-.list-page-btn { width: 36px; height: 32px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.list-page-btn { width: 32px; height: 32px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
 .list-page-btn:active { background: var(--border); }
 .list-page-btn:disabled { opacity: 0.3; cursor: default; }
-.list-page-info { font-size: 12px; color: var(--muted); font-family: 'JetBrains Mono', monospace; min-width: 70px; text-align: center; }
+.list-page-info { font-size: 11px; color: var(--muted); font-family: 'JetBrains Mono', monospace; min-width: 60px; text-align: center; }
 
 .file-item { padding: 12px 14px; border-bottom: 1px solid var(--border); cursor: pointer; display: flex; flex-direction: column; gap: 4px; transition: background 0.15s; }
 .file-item:active, .file-item.active { background: var(--surface2); }
@@ -198,9 +198,9 @@ const TABLE        = "logs";
 const BATCH_SIZE   = 5;
 const RETRY_MAX    = 3;
 const RETRY_DELAY  = 600;
-const LIST_PAGE_SIZE = 1000;   // リストのページネーション: 1000ファイルごと
+const PAGE_SIZE    = 1000;
 
-// ★★★ 強力な AI 判定ルール（Grok完全対応）★★★
+// ★★★ 強力な AI 判定ルール（拡張版：Grok は X数字-Grok / Grok- / 先頭Grok など完全対応）★★★
 const AI_RULES = [
   { key: "chatgpt",  patterns: [/^CG-/i, /chatgpt/i],                         label: "ChatGPT",  cssClass: "ai-chatgpt" },
   { key: "grok",     patterns: [/^(?:X\d+-)?Grok[-_ ]/i, /^Grok[-_ ]/i, /Grok/i], label: "Grok",  cssClass: "ai-grok" },
@@ -209,14 +209,19 @@ const AI_RULES = [
   { key: "dola",     patterns: [/^Dola-/i, /dola/i],                           label: "Dola",     cssClass: "ai-dola" },
 ];
 
+// detectAI: ファイル名(拡張子除去)に対して、上から順にマッチ。より確実に "X123-Grok-xxx.txt" をGrok判定
 function detectAI(title) {
   if (!title) return { key: "other", label: "Other", cssClass: "ai-other" };
+  // 拡張子除去（安全のため）
   let base = title.replace(/\.(txt|md|log)$/i, "");
   for (const r of AI_RULES) {
     for (const pattern of r.patterns) {
-      if (pattern.test(base)) return r;
+      if (pattern.test(base)) {
+        return r;
+      }
     }
   }
+  // 最終フォールバック: ファイル名に "grok" が含まれるか大文字小文字無視で再チェック (念のため)
   if (/grok/i.test(base)) return { key: "grok", label: "Grok", cssClass: "ai-grok" };
   return { key: "other", label: "Other", cssClass: "ai-other" };
 }
@@ -225,6 +230,7 @@ function aiInfo(key) {
   return AI_RULES.find(r => r.key === key) || { key: "other", label: "Other", cssClass: "ai-other" };
 }
 
+// ファイル名からソート用数値抽出 (末尾の連番などを考慮)
 function extractSortKey(title) {
   const matches = title.match(/(\d+)/g);
   if (!matches) return 0;
@@ -363,11 +369,13 @@ function hideProgress() {
   document.getElementById("main").classList.remove("with-progress");
 }
 
-// ── ファイルリスト管理 (1000件ごとのページネーション対応) ──
+// ── ファイルリスト管理 ──
 let allFiles = [];           // { id, title, ai_type, created_at }
 let currentFilter = "all";
 let currentSearch = "";
-let listPage = 1;            // 現在のリストページ (1-indexed)
+let listPage = 1;
+let currentFileId = null;
+let currentLogContent = null;
 
 function getFilteredFiles() {
   let filtered = [...allFiles];
@@ -384,16 +392,13 @@ function getFilteredFiles() {
 function renderFileList() {
   const container = document.getElementById("file-list");
   const filtered = getFilteredFiles();
-  const totalPages = Math.ceil(filtered.length / LIST_PAGE_SIZE);
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   if (totalPages > 0 && listPage > totalPages) listPage = totalPages;
-  if (listPage < 1) listPage = 1;
-  const start = (listPage - 1) * LIST_PAGE_SIZE;
-  const pageItems = filtered.slice(start, start + LIST_PAGE_SIZE);
+  const start = (listPage - 1) * PAGE_SIZE;
+  const pageItems = filtered.slice(start, start + PAGE_SIZE);
   
-  if (pageItems.length === 0 && filtered.length === 0) {
+  if (pageItems.length === 0) {
     container.innerHTML = `<div class="sidebar-empty">📭 ファイルがありません<br>ZIPをアップロードしてください</div>`;
-  } else if (pageItems.length === 0 && filtered.length > 0) {
-    container.innerHTML = `<div class="sidebar-empty">📄 このページには表示するファイルがありません</div>`;
   } else {
     container.innerHTML = pageItems.map(f => {
       const ai = aiInfo(f.ai_type);
@@ -423,12 +428,10 @@ function renderFileList() {
     <span class="list-page-info">${listPage} / ${totalPages}</span>
     <button class="list-page-btn" id="list-next" ${listPage===totalPages?'disabled':''}>→</button>
   `;
-  const prevBtn = document.getElementById("list-prev");
-  const nextBtn = document.getElementById("list-next");
-  if (prevBtn) prevBtn.addEventListener('click', () => {
+  document.getElementById("list-prev")?.addEventListener('click', () => {
     if (listPage > 1) { listPage--; renderFileList(); }
   });
-  if (nextBtn) nextBtn.addEventListener('click', () => {
+  document.getElementById("list-next")?.addEventListener('click', () => {
     if (listPage < totalPages) { listPage++; renderFileList(); }
   });
 }
@@ -436,7 +439,6 @@ function renderFileList() {
 async function loadList() {
   try {
     allFiles = await sbGetAll();
-    listPage = 1;
     renderFileList();
     if (currentFileId && allFiles.some(f=>f.id===currentFileId)) {
       loadAndViewLog(currentFileId);
@@ -585,7 +587,6 @@ window.clearAll = async () => {
   } catch(e) { showToast("削除失敗:"+e.message, "error"); }
 };
 
-// 未使用の関数ダミー (念のため)
 window.changePage = (delta) => {};
 </script>
 </body>
