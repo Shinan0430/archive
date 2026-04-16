@@ -198,20 +198,25 @@ const TABLE        = "logs";
 const BATCH_SIZE   = 5;
 const RETRY_MAX    = 3;
 const RETRY_DELAY  = 600;
-const PAGE_SIZE    = 1000; // 1ページあたりの表示件数
+const PAGE_SIZE    = 1000;
 
+// ★★★ 修正：prefixes を配列で持つ ★★★
 const AI_RULES = [
-  { key: "chatgpt",  prefixes: ["CG-"],           label: "ChatGPT",  cssClass: "ai-chatgpt" },
-  { key: "grok",     prefixes: ["Grok-", "X1-Grok-"], label: "Grok", cssClass: "ai-grok" },
-  { key: "deepseek", prefixes: ["DS-"],           label: "DeepSeek", cssClass: "ai-deepseek" },
-  { key: "claude",   prefixes: ["C-"],            label: "Claude",   cssClass: "ai-claude" },
-  { key: "dola",     prefixes: ["Dola-"],         label: "Dola",     cssClass: "ai-dola" },
+  { key: "chatgpt",  prefixes: ["CG-"],              label: "ChatGPT",  cssClass: "ai-chatgpt" },
+  { key: "grok",     prefixes: ["Grok-", "X1-Grok-"], label: "Grok",    cssClass: "ai-grok" },
+  { key: "deepseek", prefixes: ["DS-"],              label: "DeepSeek", cssClass: "ai-deepseek" },
+  { key: "claude",   prefixes: ["C-"],               label: "Claude",   cssClass: "ai-claude" },
+  { key: "dola",     prefixes: ["Dola-"],            label: "Dola",     cssClass: "ai-dola" },
 ];
 
+// ★★★ 修正：正しくプレフィックスを検出する関数 ★★★
 function detectAI(title) {
+  if (!title) return { key: "other", label: "Other", cssClass: "ai-other" };
   for (const r of AI_RULES) {
     for (const prefix of r.prefixes) {
-      if (title.startsWith(prefix)) return r;
+      if (title.startsWith(prefix)) {
+        return r;
+      }
     }
   }
   return { key: "other", label: "Other", cssClass: "ai-other" };
@@ -225,9 +230,7 @@ function aiInfo(key) {
 function extractSortKey(title) {
   const match = title.match(/(\d+)/g);
   if (!match) return 0;
-  // 最後の数字を優先的に使用（例: X1-Grok-001 → 1）
   const lastNum = parseInt(match[match.length - 1], 10);
-  // 最初の数字も考慮（例: X1-Grok-001 → 1と1）
   const firstNum = match.length > 1 ? parseInt(match[0], 10) : 0;
   return firstNum * 10000 + lastNum;
 }
@@ -249,7 +252,6 @@ async function sbFetch(path, opts = {}) {
   return ct.includes("json") ? res.json() : null;
 }
 
-// 全件取得
 async function sbGetAll() {
   let allRows = [];
   let offset = 0;
@@ -261,7 +263,6 @@ async function sbGetAll() {
     offset += 1000;
   }
 
-  // 数字順でソート
   allRows.sort((a, b) => extractSortKey(a.title) - extractSortKey(b.title));
   return allRows;
 }
@@ -430,7 +431,7 @@ async function extractEntries(file) {
     const fileName = parts[parts.length - 1];
     const title = fileName.replace(/\.txt$/i, "");
     const content = await entry.async("string");
-    const ai = detectAI(title);
+    const ai = detectAI(title); // ★ここで正しく Grok 判定される
 
     entries.push({ title, content, ai_type: ai.key });
   }
@@ -463,20 +464,17 @@ function setFilter(ai) {
   applyFilterAndSearch();
 }
 
-// 検索機能（リアルタイム）
 document.getElementById("search-input").addEventListener("input", (e) => {
   searchQ = e.target.value.trim();
   applyFilterAndSearch();
 });
 
 function applyFilterAndSearch() {
-  // フィルタリング
   let rows = allRows;
   if (curFilter !== "all") {
     rows = rows.filter(r => r.ai_type === curFilter);
   }
   
-  // 検索（タイトル部分一致）
   if (searchQ) {
     const q = searchQ.toLowerCase();
     rows = rows.filter(r => r.title.toLowerCase().includes(q));
@@ -520,7 +518,7 @@ function renderListPage() {
       activeId = row.id; 
       openLog(row.id, row.title, row.ai_type); 
       closeMenu(); 
-      renderListPage(); // アクティブ状態を更新
+      renderListPage();
     };
     list.appendChild(div);
   });
@@ -546,7 +544,6 @@ function changeListPage(delta) {
   currentListPage = newPage;
   renderListPage();
   renderListPagination();
-  // リストの先頭にスクロール
   document.getElementById("file-list-wrap").scrollTop = 0;
 }
 
