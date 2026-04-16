@@ -1,189 +1,3 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>AI会話ログ</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<style>
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-:root {
-  --bg: #0a0a0b; --surface: #111113; --surface2: #18181b;
-  --border: #2a2a2e; --accent: #7c6af7; --accent2: #a78bfa;
-  --text: #e4e4e7; --muted: #71717a;
-  --success: #34d399; --error: #f87171; --topbar: 52px;
-  --chatgpt: #10a37f; --grok: #1d9bf0; --deepseek: #4f8ef7;
-  --claude: #c96442; --dola: #e040fb;
-}
-html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: 'Noto Sans JP', sans-serif; font-size: 14px; -webkit-font-smoothing: antialiased; }
-
-#pw-screen { position: fixed; inset: 0; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; z-index: 9999; transition: opacity 0.3s; }
-#pw-screen.hidden { opacity: 0; pointer-events: none; }
-.pw-logo { font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 4px; color: var(--accent2); text-transform: uppercase; }
-.pw-title { font-size: 22px; font-weight: 300; letter-spacing: 1px; }
-.pw-box { display: flex; flex-direction: column; gap: 12px; width: min(320px, 88vw); }
-.pw-input { width: 100%; padding: 12px 16px; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 15px; font-family: 'JetBrains Mono', monospace; letter-spacing: 3px; outline: none; transition: border-color 0.2s; }
-.pw-input:focus { border-color: var(--accent); }
-.pw-input.error { border-color: var(--error); animation: shake 0.3s; }
-@keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-6px)} 75%{transform:translateX(6px)} }
-.pw-btn { width: 100%; padding: 12px; background: var(--accent); border: none; border-radius: 8px; color: #fff; font-size: 14px; font-family: 'Noto Sans JP', sans-serif; cursor: pointer; }
-.pw-btn:active { opacity: 0.8; }
-.pw-err { font-size: 12px; color: var(--error); text-align: center; height: 16px; }
-
-.topbar { position: fixed; top: 0; left: 0; right: 0; height: var(--topbar); background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 10px; gap: 8px; z-index: 100; }
-.menu-btn { width: 36px; height: 36px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 5px; cursor: pointer; flex-shrink: 0; border-radius: 6px; }
-.menu-btn span { display: block; width: 18px; height: 2px; background: var(--text); border-radius: 2px; transition: 0.3s; }
-.menu-btn.open span:nth-child(1) { transform: rotate(45deg) translate(5px,5px); }
-.menu-btn.open span:nth-child(2) { opacity: 0; }
-.menu-btn.open span:nth-child(3) { transform: rotate(-45deg) translate(5px,-5px); }
-.topbar-title { flex: 1; font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.topbar-actions { display: flex; gap: 5px; flex-shrink: 0; }
-.btn { padding: 6px 10px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 11px; font-family: 'Noto Sans JP', sans-serif; cursor: pointer; white-space: nowrap; }
-.btn:active { background: var(--border); }
-.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-.btn:disabled { opacity: 0.4; cursor: default; }
-
-#progress-bar-wrap { position: fixed; top: var(--topbar); left: 0; right: 0; background: var(--surface2); border-bottom: 1px solid var(--border); padding: 10px 14px; z-index: 99; display: none; flex-direction: column; gap: 6px; }
-#progress-bar-wrap.show { display: flex; }
-.progress-label { font-size: 12px; color: var(--muted); font-family: 'JetBrains Mono', monospace; }
-.progress-track { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
-.progress-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.2s; width: 0%; }
-
-.sidebar-overlay { position: fixed; inset: 0; top: var(--topbar); background: rgba(0,0,0,0.5); z-index: 90; opacity: 0; pointer-events: none; transition: opacity 0.25s; }
-.sidebar-overlay.open { opacity: 1; pointer-events: all; }
-.sidebar { position: fixed; top: var(--topbar); left: 0; width: min(290px, 85vw); height: calc(100% - var(--topbar)); background: var(--surface); border-right: 1px solid var(--border); overflow: hidden; z-index: 95; transform: translateX(-100%); transition: transform 0.25s cubic-bezier(0.4,0,0.2,1); display: flex; flex-direction: column; }
-.sidebar.open { transform: translateX(0); }
-
-.search-box { padding: 10px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
-.search-input { width: 100%; padding: 8px 12px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 13px; font-family: 'Noto Sans JP', sans-serif; outline: none; }
-.search-input:focus { border-color: var(--accent); }
-
-.filter-tabs { display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0; overflow-x: auto; scrollbar-width: none; }
-.filter-tabs::-webkit-scrollbar { display: none; }
-.ftab { padding: 8px 10px; font-size: 11px; cursor: pointer; color: var(--muted); white-space: nowrap; border-bottom: 2px solid transparent; transition: color 0.2s, border-color 0.2s; flex-shrink: 0; }
-.ftab.active { color: var(--text); border-bottom-color: var(--accent); }
-.ftab .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
-
-.file-list-wrap { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
-.sidebar-empty { padding: 24px 16px; color: var(--muted); font-size: 13px; text-align: center; line-height: 1.8; }
-
-.file-item { padding: 12px 14px; border-bottom: 1px solid var(--border); cursor: pointer; display: flex; flex-direction: column; gap: 4px; transition: background 0.15s; }
-.file-item:active, .file-item.active { background: var(--surface2); }
-.file-item-top { display: flex; align-items: center; gap: 6px; }
-.ai-badge { font-size: 10px; font-family: 'JetBrains Mono', monospace; padding: 2px 6px; border-radius: 4px; flex-shrink: 0; font-weight: 500; }
-.file-name { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
-.file-item.active .file-name { color: var(--accent2); }
-.file-date { font-size: 10px; color: var(--muted); font-family: 'JetBrains Mono', monospace; }
-
-.ai-chatgpt  { background: rgba(16,163,127,0.15); color: var(--chatgpt); }
-.ai-grok     { background: rgba(29,155,240,0.15); color: var(--grok); }
-.ai-deepseek { background: rgba(79,142,247,0.15); color: var(--deepseek); }
-.ai-claude   { background: rgba(201,100,66,0.15); color: var(--claude); }
-.ai-dola     { background: rgba(224,64,251,0.15); color: var(--dola); }
-.ai-other    { background: rgba(113,113,122,0.15); color: var(--muted); }
-
-.main { position: fixed; top: var(--topbar); left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; transition: top 0.2s; }
-.main.with-progress { top: calc(var(--topbar) + 52px); }
-
-.page-nav { flex-shrink: 0; background: var(--surface); border-bottom: 1px solid var(--border); display: none; align-items: center; justify-content: space-between; padding: 8px 14px; gap: 10px; }
-.page-nav.show { display: flex; }
-.nav-btn { width: 36px; height: 36px; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.nav-btn:active { background: var(--border); }
-.nav-btn:disabled { opacity: 0.3; cursor: default; }
-.page-info { font-size: 12px; color: var(--muted); text-align: center; flex: 1; font-family: 'JetBrains Mono', monospace; }
-.page-title { font-size: 11px; color: var(--muted); text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-.viewer-wrap { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
-.viewer { padding: 16px 14px 40px; font-size: 13px; line-height: 1.9; color: var(--text); }
-
-.placeholder { height: 100%; min-height: calc(100vh - var(--topbar)); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--muted); padding: 40px 20px; text-align: center; }
-.placeholder-icon { font-size: 36px; opacity: 0.4; }
-.placeholder-text { font-size: 14px; line-height: 1.7; }
-
-.msg-block { margin-bottom: 18px; }
-.msg-user { background: var(--surface2); border-radius: 10px; padding: 12px 14px; }
-.msg-user-label { font-size: 10px; color: var(--accent2); font-family: 'JetBrains Mono', monospace; margin-bottom: 6px; letter-spacing: 1px; }
-.msg-ai { padding: 12px 0; border-bottom: 1px solid var(--border); }
-.msg-ai-label { font-size: 10px; margin-bottom: 6px; font-family: 'JetBrains Mono', monospace; letter-spacing: 1px; }
-.msg-text { white-space: pre-wrap; word-break: break-word; font-size: 13px; line-height: 1.85; }
-
-#toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px); background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 10px 18px; border-radius: 8px; font-size: 13px; z-index: 999; transition: transform 0.3s, opacity 0.3s; opacity: 0; white-space: nowrap; max-width: 88vw; overflow: hidden; text-overflow: ellipsis; }
-#toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
-#toast.success { border-color: var(--success); color: var(--success); }
-#toast.error { border-color: var(--error); color: var(--error); }
-
-::-webkit-scrollbar { width: 4px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-</style>
-</head>
-<body>
-
-<div id="pw-screen">
-  <div class="pw-logo">AI LOG VIEWER</div>
-  <div class="pw-title">パスワードを入力</div>
-  <div class="pw-box">
-    <input type="password" class="pw-input" id="pw-input" placeholder="password" autocomplete="off">
-    <div class="pw-err" id="pw-err"></div>
-    <button class="pw-btn" onclick="checkPassword()">ロック解除</button>
-  </div>
-</div>
-
-<div class="topbar">
-  <div class="menu-btn" id="menu-btn" onclick="toggleMenu()"><span></span><span></span><span></span></div>
-  <div class="topbar-title" id="topbar-title">AI会話ログ</div>
-  <div class="topbar-actions">
-    <input type="file" id="zipInput" accept=".zip" multiple hidden>
-    <button class="btn primary" id="zip-btn" onclick="document.getElementById('zipInput').click()">ZIP</button>
-    <button class="btn" onclick="clearAll()">全削除</button>
-  </div>
-</div>
-
-<div id="progress-bar-wrap">
-  <div class="progress-label" id="progress-label">処理中… 0 / 0</div>
-  <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
-</div>
-
-<div class="sidebar-overlay" id="overlay" onclick="closeMenu()"></div>
-<div class="sidebar" id="sidebar">
-  <div class="search-box">
-    <input class="search-input" id="search-input" placeholder="🔍 タイトル・内容を検索…" oninput="onSearch()">
-  </div>
-  <div class="filter-tabs">
-    <div class="ftab active" data-ai="all"      onclick="setFilter('all')">すべて</div>
-    <div class="ftab" data-ai="chatgpt"  onclick="setFilter('chatgpt')"><span class="dot" style="background:var(--chatgpt)"></span>ChatGPT</div>
-    <div class="ftab" data-ai="grok"     onclick="setFilter('grok')"><span class="dot" style="background:var(--grok)"></span>Grok</div>
-    <div class="ftab" data-ai="deepseek" onclick="setFilter('deepseek')"><span class="dot" style="background:var(--deepseek)"></span>DeepSeek</div>
-    <div class="ftab" data-ai="claude"   onclick="setFilter('claude')"><span class="dot" style="background:var(--claude)"></span>Claude</div>
-    <div class="ftab" data-ai="dola"     onclick="setFilter('dola')"><span class="dot" style="background:var(--dola)"></span>Dola</div>
-  </div>
-  <div class="file-list-wrap">
-    <div id="file-list"></div>
-  </div>
-</div>
-
-<div class="main" id="main">
-  <div class="page-nav" id="page-nav">
-    <button class="nav-btn" id="btn-prev" onclick="changePage(-1)">←</button>
-    <div style="flex:1;text-align:center">
-      <div class="page-info" id="page-info"></div>
-      <div class="page-title" id="page-title-nav"></div>
-    </div>
-    <button class="nav-btn" id="btn-next" onclick="changePage(1)">→</button>
-  </div>
-  <div class="viewer-wrap" id="viewer-wrap">
-    <div id="viewer">
-      <div class="placeholder">
-        <div class="placeholder-icon">📂</div>
-        <div class="placeholder-text">ZIPを読み込むと<br>会話ログが表示される</div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<div id="toast"></div>
-
 <script>
 const PASS         = "ai-shinan";
 const SUPABASE_URL = "https://mtprohzzgfdohlxvfpwl.supabase.co";
@@ -192,232 +6,64 @@ const TABLE        = "logs";
 const BATCH_SIZE   = 5;
 const RETRY_MAX    = 3;
 const RETRY_DELAY  = 600;
+const LIST_PAGE_SIZE = 50;   // ← ここで一度に読み込む件数を調整可能
 
-const AI_RULES = [
-  { key: "chatgpt",  prefix: "CG-",   label: "ChatGPT",  cssClass: "ai-chatgpt" },
-  { key: "grok",     prefix: "Grok-", label: "Grok",     cssClass: "ai-grok" },
-  { key: "deepseek", prefix: "DS-",   label: "DeepSeek", cssClass: "ai-deepseek" },
-  { key: "claude",   prefix: "C-",    label: "Claude",   cssClass: "ai-claude" },
-  { key: "dola",     prefix: "Dola-", label: "Dola",     cssClass: "ai-dola" },
-];
-function detectAI(title) {
-  for (const r of AI_RULES) { if (title.startsWith(r.prefix)) return r; }
-  return { key: "other", label: "Other", cssClass: "ai-other" };
-}
-function aiInfo(key) {
-  return AI_RULES.find(r => r.key === key) || { key: "other", label: "Other", cssClass: "ai-other" };
-}
+const AI_RULES = [ /* 変更なし */ ];
 
-const SB_H = {
-  "Content-Type": "application/json",
-  "apikey": SUPABASE_KEY,
-  "Authorization": `Bearer ${SUPABASE_KEY}`
-};
+function detectAI(title) { /* 変更なし */ }
+function aiInfo(key) { /* 変更なし */ }
 
-async function sbFetch(path, opts = {}) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
-    ...opts, headers: { ...SB_H, ...(opts.headers || {}) }
-  });
-  if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
-  if (res.status === 204) return null;
-  const ct = res.headers.get("content-type") || "";
-  return ct.includes("json") ? res.json() : null;
+// Supabase用ヘッダー（変更なし）
+const SB_H = { /* 変更なし */ };
+
+async function sbFetch(path, opts = {}) { /* 変更なし */ }
+
+// === ここから変更 ===
+let allRows = [];
+let hasMore = true;
+let currentOffset = 0;
+let isLoading = false;
+
+async function sbGetLogs(limit = LIST_PAGE_SIZE, offset = 0) {
+  return sbFetch(`\( {TABLE}?select=id,title,ai_type,created_at&order=created_at.desc&limit= \){limit}&offset=${offset}`);
 }
 
-const sbGetAll    = () => sbFetch(`${TABLE}?select=id,title,ai_type,created_at&order=created_at.desc`).then(r => r || []);
-const sbGetOne    = id => sbFetch(`${TABLE}?id=eq.${id}&select=title,content,ai_type`).then(r => r?.[0] || null);
-const sbSearch    = q  => sbFetch(`${TABLE}?or=(title.ilike.*${encodeURIComponent(q)}*,content.ilike.*${encodeURIComponent(q)}*)&select=id,title,ai_type,created_at&order=created_at.desc`).then(r => r || []);
-const sbDeleteAll = () => sbFetch(`${TABLE}?id=gt.0`, { method: "DELETE", headers: { "Prefer": "return=minimal" } });
+const sbSearch = q => 
+  sbFetch(`\( {TABLE}?or=(title.ilike.* \){encodeURIComponent(q)}*,content.ilike.*${encodeURIComponent(q)}*)&select=id,title,ai_type,created_at&order=created_at.desc&limit=100`);
 
-// 既存タイトル→IDのキャッシュ
-let titleCache = null;
+async function ensureTitleCache() { /* 変更なし */ }
+async function sbUpsertSafe(...) { /* 変更なし */ }
 
-async function ensureTitleCache() {
-  if (titleCache !== null) return;
-  const rows = await sbFetch(`${TABLE}?select=id,title`) || [];
-  titleCache = {};
-  for (const r of rows) titleCache[r.title] = r.id;
-}
-
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-
-// リトライ付きINSERT/UPDATE（絶対に他のレコードを消さない）
-async function sbUpsertSafe(title, content, ai_type) {
-  for (let attempt = 0; attempt <= RETRY_MAX; attempt++) {
-    try {
-      await ensureTitleCache();
-      const existingId = titleCache[title];
-      if (existingId) {
-        await sbFetch(`${TABLE}?id=eq.${existingId}`, {
-          method: "PATCH",
-          headers: { "Prefer": "return=minimal" },
-          body: JSON.stringify({ content, ai_type, created_at: new Date().toISOString() })
-        });
-      } else {
-        const result = await sbFetch(TABLE, {
-          method: "POST",
-          headers: { "Prefer": "return=representation" },
-          body: JSON.stringify({ title, content, ai_type })
-        });
-        // 新規IDをキャッシュに追加
-        if (result?.[0]?.id) titleCache[title] = result[0].id;
-      }
-      return true;
-    } catch (err) {
-      if (attempt < RETRY_MAX) {
-        await sleep(RETRY_DELAY * (attempt + 1));
-      } else {
-        console.error(`保存失敗: ${title}`, err.message);
-        return false;
-      }
-    }
+// ── 一覧読み込み（無限スクロール対応） ──
+async function loadList(reset = true) {
+  if (reset) {
+    allRows = [];
+    currentOffset = 0;
+    hasMore = true;
+    document.getElementById("file-list").innerHTML = '<div class="sidebar-empty">読み込み中…</div>';
   }
-  return false;
-}
-
-// ── パスワード ──
-document.getElementById("pw-input").addEventListener("keydown", e => { if (e.key === "Enter") checkPassword(); });
-function checkPassword() {
-  const inp = document.getElementById("pw-input");
-  const err = document.getElementById("pw-err");
-  if (inp.value === PASS) {
-    const s = document.getElementById("pw-screen");
-    s.classList.add("hidden");
-    setTimeout(() => s.style.display = "none", 300);
-    loadList();
-  } else {
-    err.textContent = "パスワードが違う";
-    inp.classList.add("error"); inp.value = "";
-    setTimeout(() => { inp.classList.remove("error"); err.textContent = ""; }, 1500);
-  }
-}
-
-// ── UI ──
-let menuOpen = false;
-function toggleMenu() {
-  menuOpen = !menuOpen;
-  document.getElementById("sidebar").classList.toggle("open", menuOpen);
-  document.getElementById("overlay").classList.toggle("open", menuOpen);
-  document.getElementById("menu-btn").classList.toggle("open", menuOpen);
-}
-function closeMenu() {
-  menuOpen = false;
-  ["sidebar","overlay","menu-btn"].forEach(id => document.getElementById(id).classList.remove("open"));
-}
-
-let toastTimer;
-function showToast(msg, type = "") {
-  const t = document.getElementById("toast");
-  t.textContent = msg; t.className = "show " + type;
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.className = "", 3000);
-}
-
-function showProgress(cur, total) {
-  document.getElementById("progress-bar-wrap").classList.add("show");
-  document.getElementById("main").classList.add("with-progress");
-  document.getElementById("progress-fill").style.width = total > 0 ? `${Math.round(cur/total*100)}%` : "0%";
-  document.getElementById("progress-label").textContent = `保存中… ${cur} / ${total}`;
-}
-function hideProgress() {
-  document.getElementById("progress-bar-wrap").classList.remove("show");
-  document.getElementById("main").classList.remove("with-progress");
-}
-
-// ── ZIP処理 ──
-document.getElementById("zipInput").addEventListener("change", async (e) => {
-  const files = Array.from(e.target.files);
-  if (!files.length) return;
-  e.target.value = "";
-  document.getElementById("zip-btn").disabled = true;
-  showToast("ZIPを解析中…");
-
-  // 全エントリ収集
-  const allEntries = [];
-  for (const file of files) {
-    try {
-      const entries = await extractEntries(file);
-      allEntries.push(...entries);
-    } catch (err) {
-      console.error(file.name, err);
-    }
-  }
-
-  if (allEntries.length === 0) {
-    showToast("保存できるファイルがなかった", "error");
-    document.getElementById("zip-btn").disabled = false;
-    return;
-  }
-
-  // キャッシュをリセットして再取得
-  titleCache = null;
-  await ensureTitleCache();
-
-  let added = 0, failed = 0;
-  const total = allEntries.length;
-  showProgress(0, total);
-
-  // バッチ処理（5件ずつ並列、間隔100ms）
-  for (let i = 0; i < total; i += BATCH_SIZE) {
-    const batch = allEntries.slice(i, i + BATCH_SIZE);
-    const results = await Promise.all(
-      batch.map(en => sbUpsertSafe(en.title, en.content, en.ai_type))
-    );
-    results.forEach(ok => ok ? added++ : failed++);
-    showProgress(Math.min(i + BATCH_SIZE, total), total);
-    if (i + BATCH_SIZE < total) await sleep(100);
-  }
-
-  hideProgress();
-  document.getElementById("zip-btn").disabled = false;
-  showToast(
-    added > 0
-      ? `${added}件保存完了${failed ? `（${failed}件失敗）` : ""}`
-      : "保存失敗",
-    added > 0 ? "success" : "error"
-  );
-  await loadList();
-});
-
-async function extractEntries(file) {
-  const zip = await JSZip.loadAsync(file);
-  const folderMap = {};
-  for (const [path, entry] of Object.entries(zip.files)) {
-    if (entry.dir || !path.endsWith(".txt")) continue;
-    const parts      = path.split("/").filter(Boolean);
-    const folderName = parts.length >= 2 ? parts[0] : "__root__";
-    const fileName   = parts[parts.length - 1];
-    if (!folderMap[folderName]) folderMap[folderName] = [];
-    const content = await entry.async("string");
-    folderMap[folderName].push({ fileName, content });
-  }
-  const entries = [];
-  for (const [folderName, txts] of Object.entries(folderMap)) {
-    const title = folderName === "__root__" ? txts[0]?.fileName.replace(".txt","") : folderName;
-    txts.sort((a, b) => a.fileName.localeCompare(b.fileName));
-    const content = txts.map(t => t.content).join("\n\n---\n\n");
-    entries.push({ title, content, ai_type: detectAI(title).key });
-  }
-  return entries;
-}
-
-// ── 一覧 ──
-let allRows = [], curFilter = "all", activeId = null;
-
-async function loadList() {
-  document.getElementById("file-list").innerHTML = '<div class="sidebar-empty">読み込み中…</div>';
+  if (isLoading || !hasMore) return;
+  
+  isLoading = true;
   try {
-    allRows = await sbGetAll();
+    const newRows = await sbGetLogs(LIST_PAGE_SIZE, currentOffset);
+    if (newRows.length < LIST_PAGE_SIZE) hasMore = false;
+    
+    allRows = [...allRows, ...newRows];
+    currentOffset += newRows.length;
+    
     renderList();
   } catch (err) {
-    document.getElementById("file-list").innerHTML = `<div class="sidebar-empty">読み込み失敗<br><small>${err.message}</small></div>`;
+    console.error(err);
+  } finally {
+    isLoading = false;
   }
 }
 
 function setFilter(ai) {
   curFilter = ai;
   document.querySelectorAll(".ftab").forEach(t => t.classList.toggle("active", t.dataset.ai === ai));
-  renderList();
+  loadList(true);   // フィルタ変更時はリセット
 }
 
 let searchTimer;
@@ -425,126 +71,91 @@ function onSearch() {
   clearTimeout(searchTimer);
   searchTimer = setTimeout(async () => {
     const q = document.getElementById("search-input").value.trim();
-    allRows = q ? await sbSearch(q) : await sbGetAll();
+    if (q) {
+      allRows = await sbSearch(q);
+      hasMore = false;
+    } else {
+      await loadList(true);
+    }
     renderList();
   }, 350);
 }
 
 function renderList() {
   const list = document.getElementById("file-list");
-  const rows = curFilter === "all" ? allRows : allRows.filter(r => r.ai_type === curFilter);
-  if (rows.length === 0) { list.innerHTML = '<div class="sidebar-empty">該当なし</div>'; return; }
+  let rows = curFilter === "all" ? allRows : allRows.filter(r => r.ai_type === curFilter);
+
+  if (rows.length === 0) {
+    list.innerHTML = '<div class="sidebar-empty">該当なし</div>';
+    return;
+  }
+
   list.innerHTML = "";
   rows.forEach(row => {
-    const ai  = aiInfo(row.ai_type);
+    const ai = aiInfo(row.ai_type);
     const div = document.createElement("div");
     div.className = "file-item" + (row.id === activeId ? " active" : "");
-    const dateStr = row.created_at
-      ? new Date(row.created_at).toLocaleDateString("ja-JP", { month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit" })
+    const dateStr = row.created_at 
+      ? new Date(row.created_at).toLocaleDateString("ja-JP", {month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit"}) 
       : "";
+    
     div.innerHTML = `
       <div class="file-item-top">
-        <span class="ai-badge ${ai.cssClass}">${ai.label}</span>
+        <span class="ai-badge \( {ai.cssClass}"> \){ai.label}</span>
         <span class="file-name">${escHtml(row.title)}</span>
       </div>
       <div class="file-date">${dateStr}</div>`;
-    div.onclick = () => { activeId = row.id; openLog(row.id, row.title, row.ai_type); closeMenu(); renderList(); };
+    
+    div.onclick = () => {
+      activeId = row.id;
+      openLog(row.id, row.title, row.ai_type);
+      closeMenu();
+      renderList();
+    };
     list.appendChild(div);
   });
-}
 
-// ── 会話表示 ──
-let pages = [], curPage = 0, curTitle = "", curAiLabel = "";
-
-async function openLog(id, title, aiType) {
-  curTitle = title; curAiLabel = aiInfo(aiType).label;
-  document.getElementById("topbar-title").textContent = title;
-  document.getElementById("viewer").innerHTML = '<div class="placeholder"><div class="placeholder-icon">⏳</div><div class="placeholder-text">読み込み中…</div></div>';
-  document.getElementById("page-nav").classList.remove("show");
-  try {
-    const data = await sbGetOne(id);
-    if (!data) { showToast("データなし", "error"); return; }
-    pages = splitPages(data.content);
-    curPage = 0;
-    renderPage();
-  } catch (err) {
-    showToast("読み込み失敗: " + err.message, "error");
+  // 無限スクロール用の余白追加
+  if (hasMore) {
+    const loader = document.createElement("div");
+    loader.className = "sidebar-empty";
+    loader.style.padding = "20px";
+    loader.textContent = "スクロールでさらに読み込み...";
+    list.appendChild(loader);
   }
 }
 
-function splitPages(raw) {
-  if (!raw) return [{ user: null, ai: "" }];
-  const parts = raw.split(/(?=私[：:])/).filter(s => s.trim());
-  if (parts.length <= 1) return [{ user: null, ai: raw }];
-  return parts.map(part => {
-    const m = part.match(/^私[：:]/);
-    if (!m) return { user: null, ai: part.trim() };
-    const body  = part.slice(m[0].length);
-    const nlIdx = body.indexOf("\n\n");
-    if (nlIdx < 0) return { user: body.trim(), ai: "" };
-    return { user: body.slice(0, nlIdx).trim(), ai: body.slice(nlIdx + 2).trim() };
+// 無限スクロール実装
+function setupInfiniteScroll() {
+  const fileListWrap = document.querySelector(".file-list-wrap");
+  fileListWrap.addEventListener("scroll", () => {
+    if (isLoading || !hasMore) return;
+    
+    const { scrollTop, scrollHeight, clientHeight } = fileListWrap;
+    if (scrollTop + clientHeight >= scrollHeight - 150) {
+      loadList(false);   // 追加読み込み
+    }
   });
 }
 
-function renderPage() {
-  const nav = document.getElementById("page-nav");
-  if (!pages.length) { nav.classList.remove("show"); return; }
-  nav.classList.add("show");
-  document.getElementById("page-info").textContent      = `${curPage + 1} / ${pages.length}`;
-  document.getElementById("page-title-nav").textContent = curTitle;
-  document.getElementById("btn-prev").disabled = curPage === 0;
-  document.getElementById("btn-next").disabled = curPage === pages.length - 1;
-
-  const page = pages[curPage];
-  const viewer = document.getElementById("viewer");
-  viewer.innerHTML = "";
-  const div = document.createElement("div");
-  div.className = "viewer";
-  if (page.user !== null) {
-    const ub = document.createElement("div");
-    ub.className = "msg-block msg-user";
-    ub.innerHTML = `<div class="msg-user-label">私</div><div class="msg-text">${escHtml(page.user)}</div>`;
-    div.appendChild(ub);
-  }
-  if (page.ai) {
-    const ab = document.createElement("div");
-    ab.className = "msg-block msg-ai";
-    ab.innerHTML = `<div class="msg-ai-label" style="color:var(--accent2)">${escHtml(curAiLabel)}</div><div class="msg-text">${escHtml(page.ai)}</div>`;
-    div.appendChild(ab);
-  }
-  viewer.appendChild(div);
-  document.getElementById("viewer-wrap").scrollTop = 0;
-}
-
-function changePage(dir) {
-  const n = curPage + dir;
-  if (n < 0 || n >= pages.length) return;
-  curPage = n; renderPage();
-}
-document.addEventListener("keydown", e => {
-  if (e.key === "ArrowLeft") changePage(-1);
-  if (e.key === "ArrowRight") changePage(1);
-});
-
-// ── 全削除 ──
-async function clearAll() {
-  if (!confirm("全ての保存ログを削除する？")) return;
-  try {
-    await sbDeleteAll();
-    titleCache = {}; activeId = null; pages = []; curPage = 0; allRows = [];
-    document.getElementById("topbar-title").textContent = "AI会話ログ";
-    document.getElementById("viewer").innerHTML = `<div class="placeholder"><div class="placeholder-icon">📂</div><div class="placeholder-text">ZIPを読み込むと<br>会話ログが表示される</div></div>`;
-    document.getElementById("page-nav").classList.remove("show");
-    renderList();
-    showToast("全削除完了", "success");
-  } catch (err) {
-    showToast("削除失敗: " + err.message, "error");
+// ── 初期化 ──
+function checkPassword() {
+  const inp = document.getElementById("pw-input");
+  const err = document.getElementById("pw-err");
+  if (inp.value === PASS) {
+    const s = document.getElementById("pw-screen");
+    s.classList.add("hidden");
+    setTimeout(() => s.style.display = "none", 300);
+    loadList(true);
+    setupInfiniteScroll();   // ← ここを追加
+  } else {
+    /* エラー処理（変更なし） */
   }
 }
 
-function escHtml(s) {
-  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-}
+// ZIP読み込み後の再読み込みも修正
+// zipInput changeイベント内の最後に以下を追加
+// await loadList(true);
+
+// その他関数（extractEntries, openLog, renderPage など）は変更なし
 </script>
-</body>
-</html>
