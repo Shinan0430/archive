@@ -7,7 +7,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-/* スタイルは変更なし（省略せず全部入れています） */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
   --bg: #0a0a0b; --surface: #111113; --surface2: #18181b;
@@ -193,7 +192,7 @@ const TABLE        = "logs";
 const BATCH_SIZE   = 5;
 const RETRY_MAX    = 3;
 const RETRY_DELAY  = 600;
-const LIST_PAGE_SIZE = 80;   // 一度に読み込む件数（好みで50〜120に調整可）
+const LIST_PAGE_SIZE = 50;        // 一度に読み込む件数（必要に応じて100などに変更可）
 
 const AI_RULES = [
   { key: "chatgpt",  prefix: "CG-",   label: "ChatGPT",  cssClass: "ai-chatgpt" },
@@ -202,7 +201,6 @@ const AI_RULES = [
   { key: "claude",   prefix: "C-",    label: "Claude",   cssClass: "ai-claude" },
   { key: "dola",     prefix: "Dola-", label: "Dola",     cssClass: "ai-dola" },
 ];
-
 function detectAI(title) {
   for (const r of AI_RULES) { if (title.startsWith(r.prefix)) return r; }
   return { key: "other", label: "Other", cssClass: "ai-other" };
@@ -227,7 +225,7 @@ async function sbFetch(path, opts = {}) {
   return ct.includes("json") ? res.json() : null;
 }
 
-// === 無限スクロール対応 ===
+// === 無限スクロール用に変更 ===
 let allRows = [];
 let hasMore = true;
 let currentOffset = 0;
@@ -239,35 +237,53 @@ async function sbGetLogs(limit = LIST_PAGE_SIZE, offset = 0) {
   return sbFetch(`\( {TABLE}?select=id,title,ai_type,created_at&order=created_at.desc&limit= \){limit}&offset=${offset}`) || [];
 }
 
-const sbSearch = q => 
-  sbFetch(`\( {TABLE}?or=(title.ilike.* \){encodeURIComponent(q)}*,content.ilike.*${encodeURIComponent(q)}*)&select=id,title,ai_type,created_at&order=created_at.desc&limit=200`) || [];
-
-async function ensureTitleCache() {
-  // 必要時のみ使用
+async function sbSearch(q) {
+  return sbFetch(`\( {TABLE}?or=(title.ilike.* \){encodeURIComponent(q)}*,content.ilike.*${encodeURIComponent(q)}*)&select=id,title,ai_type,created_at&order=created_at.desc&limit=200`) || [];
 }
 
+let titleCache = null;
+async function ensureTitleCache() {
+  if (titleCache !== null) return;
+  const rows = await sbFetch(`${TABLE}?select=id,title`) || [];
+  titleCache = {};
+  for (const r of rows) titleCache[r.title] = r.id;
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
 async function sbUpsertSafe(title, content, ai_type) {
-  // 省略（元のコードと同じ）
   for (let attempt = 0; attempt <= RETRY_MAX; attempt++) {
     try {
-      const existing = await sbFetch(`\( {TABLE}?select=id&title=eq. \){encodeURIComponent(title)}`);
-      if (existing?.[0]) {
-        await sbFetch(`\( {TABLE}?id=eq. \){existing[0].id}`, {
-          method: "PATCH", body: JSON.stringify({ content, ai_type, created_at: new Date().toISOString() })
+      await ensureTitleCache();
+      const existingId = titleCache[title];
+      if (existingId) {
+        await sbFetch(`\( {TABLE}?id=eq. \){existingId}`, {
+          method: "PATCH",
+          headers: { "Prefer": "return=minimal" },
+          body: JSON.stringify({ content, ai_type, created_at: new Date().toISOString() })
         });
       } else {
-        await sbFetch(TABLE, { method: "POST", body: JSON.stringify({ title, content, ai_type }) });
+        const result = await sbFetch(TABLE, {
+          method: "POST",
+          headers: { "Prefer": "return=representation" },
+          body: JSON.stringify({ title, content, ai_type })
+        });
+        if (result?.[0]?.id) titleCache[title] = result[0].id;
       }
       return true;
-    } catch (e) {
-      if (attempt === RETRY_MAX) console.error(e);
-      else await new Promise(r => setTimeout(r, RETRY_DELAY * (attempt + 1)));
+    } catch (err) {
+      if (attempt < RETRY_MAX) {
+        await sleep(RETRY_DELAY * (attempt + 1));
+      } else {
+        console.error(`保存失敗: ${title}`, err.message);
+        return false;
+      }
     }
   }
   return false;
 }
 
-// パスワード
+// ── パスワード ──
 document.getElementById("pw-input").addEventListener("keydown", e => { if (e.key === "Enter") checkPassword(); });
 function checkPassword() {
   const inp = document.getElementById("pw-input");
@@ -285,18 +301,40 @@ function checkPassword() {
   }
 }
 
-// UI関数
+// ── UI ──
 let menuOpen = false;
-function toggleMenu() { /* 省略（元と同じ） */ }
-function closeMenu() { /* 元と同じ */ }
+function toggleMenu() {
+  menuOpen = !menuOpen;
+  document.getElementById("sidebar").classList.toggle("open", menuOpen);
+  document.getElementById("overlay").classList.toggle("open", menuOpen);
+  document.getElementById("menu-btn").classList.toggle("open", menuOpen);
+}
+function closeMenu() {
+  menuOpen = false;
+  ["sidebar","overlay","menu-btn"].forEach(id => document.getElementById(id).classList.remove("open"));
+}
 
-function showToast(msg, type = "") { /* 元と同じ */ }
-function showProgress(cur, total) { /* 元と同じ */ }
-function hideProgress() { /* 元と同じ */ }
+let toastTimer;
+function showToast(msg, type = "") {
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.className = "show " + type;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.className = "", 3000);
+}
 
-// ZIP処理
+function showProgress(cur, total) {
+  document.getElementById("progress-bar-wrap").classList.add("show");
+  document.getElementById("main").classList.add("with-progress");
+  document.getElementById("progress-fill").style.width = total > 0 ? `${Math.round(cur/total*100)}%` : "0%";
+  document.getElementById("progress-label").textContent = `保存中… ${cur} / ${total}`;
+}
+function hideProgress() {
+  document.getElementById("progress-bar-wrap").classList.remove("show");
+  document.getElementById("main").classList.remove("with-progress");
+}
+
+// ── ZIP処理（変更なし） ──
 document.getElementById("zipInput").addEventListener("change", async (e) => {
-  // ... 元の処理（省略せず全部残していますが、長くなるのでここは同じ）
   const files = Array.from(e.target.files);
   if (!files.length) return;
   e.target.value = "";
@@ -308,7 +346,9 @@ document.getElementById("zipInput").addEventListener("change", async (e) => {
     try {
       const entries = await extractEntries(file);
       allEntries.push(...entries);
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error(file.name, err);
+    }
   }
 
   if (allEntries.length === 0) {
@@ -317,25 +357,27 @@ document.getElementById("zipInput").addEventListener("change", async (e) => {
     return;
   }
 
-  let added = 0;
+  titleCache = null;
+  await ensureTitleCache();
+
+  let added = 0, failed = 0;
   const total = allEntries.length;
   showProgress(0, total);
 
   for (let i = 0; i < total; i += BATCH_SIZE) {
     const batch = allEntries.slice(i, i + BATCH_SIZE);
     const results = await Promise.all(batch.map(en => sbUpsertSafe(en.title, en.content, en.ai_type)));
-    results.forEach(ok => { if (ok) added++; });
+    results.forEach(ok => ok ? added++ : failed++);
     showProgress(Math.min(i + BATCH_SIZE, total), total);
-    if (i + BATCH_SIZE < total) await new Promise(r => setTimeout(r, 100));
+    if (i + BATCH_SIZE < total) await sleep(100);
   }
 
   hideProgress();
   document.getElementById("zip-btn").disabled = false;
-  showToast(`${added}件保存完了`, "success");
-  await loadList(true);   // 重要：保存後に一覧をリフレッシュ
+  showToast(added > 0 ? `\( {added}件保存完了 \){failed ? `（${failed}件失敗）` : ""}` : "保存失敗", added > 0 ? "success" : "error");
+  await loadList(true);   // ZIP読み込み後も一覧をリセットして再読み込み
 });
 
-// extractEntries関数（変更なし）
 async function extractEntries(file) {
   const zip = await JSZip.loadAsync(file);
   const folderMap = {};
@@ -358,7 +400,7 @@ async function extractEntries(file) {
   return entries;
 }
 
-// 無限スクロール用一覧読み込み
+// ── 無限スクロール一覧 ──
 async function loadList(reset = true) {
   if (reset) {
     allRows = [];
@@ -375,9 +417,11 @@ async function loadList(reset = true) {
 
     allRows = [...allRows, ...newRows];
     currentOffset += newRows.length;
+
     renderList();
   } catch (err) {
     console.error(err);
+    document.getElementById("file-list").innerHTML = `<div class="sidebar-empty">読み込み失敗<br><small>${err.message}</small></div>`;
   } finally {
     isLoading = false;
   }
@@ -405,20 +449,22 @@ function onSearch() {
 }
 
 function renderList() {
-  const listEl = document.getElementById("file-list");
-  let rows = curFilter === "all" ? allRows : allRows.filter(r => r.ai_type === curFilter);
+  const list = document.getElementById("file-list");
+  const rows = curFilter === "all" ? allRows : allRows.filter(r => r.ai_type === curFilter);
 
   if (rows.length === 0) {
-    listEl.innerHTML = '<div class="sidebar-empty">該当なし</div>';
+    list.innerHTML = '<div class="sidebar-empty">該当なし</div>';
     return;
   }
 
-  listEl.innerHTML = "";
+  list.innerHTML = "";
   rows.forEach(row => {
     const ai = aiInfo(row.ai_type);
     const div = document.createElement("div");
     div.className = "file-item" + (row.id === activeId ? " active" : "");
-    const dateStr = row.created_at ? new Date(row.created_at).toLocaleDateString("ja-JP", {month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit"}) : "";
+    const dateStr = row.created_at
+      ? new Date(row.created_at).toLocaleDateString("ja-JP", { month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit" })
+      : "";
     div.innerHTML = `
       <div class="file-item-top">
         <span class="ai-badge \( {ai.cssClass}"> \){ai.label}</span>
@@ -431,29 +477,32 @@ function renderList() {
       closeMenu();
       renderList();
     };
-    listEl.appendChild(div);
+    list.appendChild(div);
   });
 
+  // さらに読み込み中の表示
   if (hasMore) {
     const loader = document.createElement("div");
     loader.className = "sidebar-empty";
-    loader.textContent = "↓ スクロールでさらに読み込み";
-    listEl.appendChild(loader);
+    loader.style.padding = "20px 16px";
+    loader.innerHTML = `スクロールでさらに読み込み中…<br><small>（現在 ${allRows.length}件）</small>`;
+    list.appendChild(loader);
   }
 }
 
+// 無限スクロール設定
 function setupInfiniteScroll() {
   const wrap = document.getElementById("file-list-wrap");
   wrap.addEventListener("scroll", () => {
     if (isLoading || !hasMore) return;
     const { scrollTop, scrollHeight, clientHeight } = wrap;
-    if (scrollTop + clientHeight > scrollHeight - 200) {
+    if (scrollTop + clientHeight >= scrollHeight - 200) {
       loadList(false);
     }
   });
 }
 
-// 会話表示部分（変更なし）
+// ── 会話表示（変更なし） ──
 let pages = [], curPage = 0, curTitle = "", curAiLabel = "";
 
 async function openLog(id, title, aiType) {
@@ -462,26 +511,85 @@ async function openLog(id, title, aiType) {
   document.getElementById("viewer").innerHTML = '<div class="placeholder"><div class="placeholder-icon">⏳</div><div class="placeholder-text">読み込み中…</div></div>';
   document.getElementById("page-nav").classList.remove("show");
   try {
-    const data = await sbFetch(`\( {TABLE}?id=eq. \){id}&select=title,content,ai_type`).then(r => r?.[0]);
-    if (!data) return;
+    const data = await sbFetch(`\( {TABLE}?id=eq. \){id}&select=title,content,ai_type`).then(r => r?.[0] || null);
+    if (!data) { showToast("データなし", "error"); return; }
     pages = splitPages(data.content);
     curPage = 0;
     renderPage();
   } catch (err) {
-    console.error(err);
+    showToast("読み込み失敗: " + err.message, "error");
   }
 }
 
-function splitPages(raw) { /* 元と同じ */ }
-function renderPage() { /* 元と同じ */ }
-function changePage(dir) { /* 元と同じ */ }
+function splitPages(raw) {
+  if (!raw) return [{ user: null, ai: "" }];
+  const parts = raw.split(/(?=私[：:])/).filter(s => s.trim());
+  if (parts.length <= 1) return [{ user: null, ai: raw }];
+  return parts.map(part => {
+    const m = part.match(/^私[：:]/);
+    if (!m) return { user: null, ai: part.trim() };
+    const body = part.slice(m[0].length);
+    const nlIdx = body.indexOf("\n\n");
+    if (nlIdx < 0) return { user: body.trim(), ai: "" };
+    return { user: body.slice(0, nlIdx).trim(), ai: body.slice(nlIdx + 2).trim() };
+  });
+}
 
+function renderPage() {
+  const nav = document.getElementById("page-nav");
+  if (!pages.length) { nav.classList.remove("show"); return; }
+  nav.classList.add("show");
+  document.getElementById("page-info").textContent = `${curPage + 1} / ${pages.length}`;
+  document.getElementById("page-title-nav").textContent = curTitle;
+  document.getElementById("btn-prev").disabled = curPage === 0;
+  document.getElementById("btn-next").disabled = curPage === pages.length - 1;
+
+  const page = pages[curPage];
+  const viewer = document.getElementById("viewer");
+  viewer.innerHTML = "";
+  const div = document.createElement("div");
+  div.className = "viewer";
+  if (page.user !== null) {
+    const ub = document.createElement("div");
+    ub.className = "msg-block msg-user";
+    ub.innerHTML = `<div class="msg-user-label">私</div><div class="msg-text">${escHtml(page.user)}</div>`;
+    div.appendChild(ub);
+  }
+  if (page.ai) {
+    const ab = document.createElement("div");
+    ab.className = "msg-block msg-ai";
+    ab.innerHTML = `<div class="msg-ai-label" style="color:var(--accent2)">\( {escHtml(curAiLabel)}</div><div class="msg-text"> \){escHtml(page.ai)}</div>`;
+    div.appendChild(ab);
+  }
+  viewer.appendChild(div);
+  document.getElementById("viewer-wrap").scrollTop = 0;
+}
+
+function changePage(dir) {
+  const n = curPage + dir;
+  if (n < 0 || n >= pages.length) return;
+  curPage = n; renderPage();
+}
 document.addEventListener("keydown", e => {
   if (e.key === "ArrowLeft") changePage(-1);
   if (e.key === "ArrowRight") changePage(1);
 });
 
-async function clearAll() { /* 元と同じ */ }
+// ── 全削除 ──
+async function clearAll() {
+  if (!confirm("全ての保存ログを削除する？")) return;
+  try {
+    await sbFetch(`${TABLE}?id=gt.0`, { method: "DELETE", headers: { "Prefer": "return=minimal" } });
+    titleCache = {}; activeId = null; pages = []; curPage = 0; allRows = [];
+    document.getElementById("topbar-title").textContent = "AI会話ログ";
+    document.getElementById("viewer").innerHTML = `<div class="placeholder"><div class="placeholder-icon">📂</div><div class="placeholder-text">ZIPを読み込むと<br>会話ログが表示される</div></div>`;
+    document.getElementById("page-nav").classList.remove("show");
+    loadList(true);
+    showToast("全削除完了", "success");
+  } catch (err) {
+    showToast("削除失敗: " + err.message, "error");
+  }
+}
 
 function escHtml(s) {
   return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
