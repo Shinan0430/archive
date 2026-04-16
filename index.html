@@ -67,6 +67,8 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 
 .file-list-wrap { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .sidebar-empty { padding: 24px 16px; color: var(--muted); font-size: 13px; text-align: center; line-height: 1.8; }
+.load-more { padding: 14px; text-align: center; color: var(--accent2); font-size: 12px; cursor: pointer; border-top: 1px solid var(--border); }
+.load-more:active { opacity: 0.7; }
 
 .file-item { padding: 12px 14px; border-bottom: 1px solid var(--border); cursor: pointer; display: flex; flex-direction: column; gap: 4px; transition: background 0.15s; }
 .file-item:active, .file-item.active { background: var(--surface2); }
@@ -141,14 +143,14 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 </div>
 
 <div id="progress-bar-wrap">
-  <div class="progress-label" id="progress-label">処理中… 0 / 0</div>
+  <div class="progress-label" id="progress-label">処理中…</div>
   <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
 </div>
 
 <div class="sidebar-overlay" id="overlay" onclick="closeMenu()"></div>
 <div class="sidebar" id="sidebar">
   <div class="search-box">
-    <input class="search-input" id="search-input" placeholder="🔍 タイトル・内容を検索…" oninput="onSearch()">
+    <input class="search-input" id="search-input" placeholder="🔍 タイトルを検索…" oninput="onSearch()">
   </div>
   <div class="filter-tabs">
     <div class="ftab active" data-ai="all"      onclick="setFilter('all')">すべて</div>
@@ -158,7 +160,7 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
     <div class="ftab" data-ai="claude"   onclick="setFilter('claude')"><span class="dot" style="background:var(--claude)"></span>Claude</div>
     <div class="ftab" data-ai="dola"     onclick="setFilter('dola')"><span class="dot" style="background:var(--dola)"></span>Dola</div>
   </div>
-  <div class="file-list-wrap">
+  <div class="file-list-wrap" id="file-list-wrap">
     <div id="file-list"></div>
   </div>
 </div>
@@ -192,6 +194,7 @@ const TABLE        = "logs";
 const BATCH_SIZE   = 5;
 const RETRY_MAX    = 3;
 const RETRY_DELAY  = 600;
+const PAGE_SIZE    = 200; // 一覧の1回の取得件数
 
 const AI_RULES = [
   { key: "chatgpt",  prefix: "CG-",   label: "ChatGPT",  cssClass: "ai-chatgpt" },
@@ -208,6 +211,7 @@ function aiInfo(key) {
   return AI_RULES.find(r => r.key === key) || { key: "other", label: "Other", cssClass: "ai-other" };
 }
 
+// ── Supabase ──
 const SB_H = {
   "Content-Type": "application/json",
   "apikey": SUPABASE_KEY,
@@ -224,24 +228,61 @@ async function sbFetch(path, opts = {}) {
   return ct.includes("json") ? res.json() : null;
 }
 
-const sbGetAll    = () => sbFetch(`${TABLE}?select=id,title,ai_type,created_at&order=created_at.desc`).then(r => r || []);
-const sbGetOne    = id => sbFetch(`${TABLE}?id=eq.${id}&select=title,content,ai_type`).then(r => r?.[0] || null);
-const sbSearch    = q  => sbFetch(`${TABLE}?or=(title.ilike.*${encodeURIComponent(q)}*,content.ilike.*${encodeURIComponent(q)}*)&select=id,title,ai_type,created_at&order=created_at.desc`).then(r => r || []);
+// 全件取得（1000件制限を回避するページネーション）
+async function sbGetAll(filter = "all", searchQ = "") {
+  let allRows = [];
+  let offset  = 0;
+
+  while (true) {
+    let path = `${TABLE}?select=id,title,ai_type,created_at&order=created_at.desc&limit=${PAGE_SIZE}&offset=${offset}`;
+
+    // フィルター
+    if (filter !== "all") {
+      path += `&ai_type=eq.${filter}`;
+    }
+
+    const rows = await sbFetch(path) || [];
+    allRows = allRows.concat(rows);
+
+    if (rows.length < PAGE_SIZE) break; // 最後のページ
+    offset += PAGE_SIZE;
+  }
+
+  // 検索はクライアント側でフィルタ（Supabaseのilike日本語問題を回避）
+  if (searchQ) {
+    const q = searchQ.toLowerCase();
+    allRows = allRows.filter(r => r.title.toLowerCase().includes(q));
+  }
+
+  return allRows;
+}
+
+async function sbGetOne(id) {
+  const rows = await sbFetch(`${TABLE}?id=eq.${id}&select=title,content,ai_type`) || [];
+  return rows[0] || null;
+}
+
 const sbDeleteAll = () => sbFetch(`${TABLE}?id=gt.0`, { method: "DELETE", headers: { "Prefer": "return=minimal" } });
 
-// 既存タイトル→IDのキャッシュ
+// 既存タイトルキャッシュ
 let titleCache = null;
 
 async function ensureTitleCache() {
   if (titleCache !== null) return;
-  const rows = await sbFetch(`${TABLE}?select=id,title`) || [];
+  // 全タイトルをページネーションで取得
+  let all = [], offset = 0;
+  while (true) {
+    const rows = await sbFetch(`${TABLE}?select=id,title&limit=1000&offset=${offset}`) || [];
+    all = all.concat(rows);
+    if (rows.length < 1000) break;
+    offset += 1000;
+  }
   titleCache = {};
-  for (const r of rows) titleCache[r.title] = r.id;
+  for (const r of all) titleCache[r.title] = r.id;
 }
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-// リトライ付きINSERT/UPDATE（絶対に他のレコードを消さない）
 async function sbUpsertSafe(title, content, ai_type) {
   for (let attempt = 0; attempt <= RETRY_MAX; attempt++) {
     try {
@@ -259,7 +300,6 @@ async function sbUpsertSafe(title, content, ai_type) {
           headers: { "Prefer": "return=representation" },
           body: JSON.stringify({ title, content, ai_type })
         });
-        // 新規IDをキャッシュに追加
         if (result?.[0]?.id) titleCache[title] = result[0].id;
       }
       return true;
@@ -332,7 +372,6 @@ document.getElementById("zipInput").addEventListener("change", async (e) => {
   document.getElementById("zip-btn").disabled = true;
   showToast("ZIPを解析中…");
 
-  // 全エントリ収集
   const allEntries = [];
   for (const file of files) {
     try {
@@ -344,12 +383,12 @@ document.getElementById("zipInput").addEventListener("change", async (e) => {
   }
 
   if (allEntries.length === 0) {
-    showToast("保存できるファイルがなかった", "error");
+    showToast("TXTが見つからなかった", "error");
     document.getElementById("zip-btn").disabled = false;
     return;
   }
 
-  // キャッシュをリセットして再取得
+  // キャッシュリセット
   titleCache = null;
   await ensureTitleCache();
 
@@ -357,12 +396,9 @@ document.getElementById("zipInput").addEventListener("change", async (e) => {
   const total = allEntries.length;
   showProgress(0, total);
 
-  // バッチ処理（5件ずつ並列、間隔100ms）
   for (let i = 0; i < total; i += BATCH_SIZE) {
     const batch = allEntries.slice(i, i + BATCH_SIZE);
-    const results = await Promise.all(
-      batch.map(en => sbUpsertSafe(en.title, en.content, en.ai_type))
-    );
+    const results = await Promise.all(batch.map(en => sbUpsertSafe(en.title, en.content, en.ai_type)));
     results.forEach(ok => ok ? added++ : failed++);
     showProgress(Math.min(i + BATCH_SIZE, total), total);
     if (i + BATCH_SIZE < total) await sleep(100);
@@ -371,71 +407,94 @@ document.getElementById("zipInput").addEventListener("change", async (e) => {
   hideProgress();
   document.getElementById("zip-btn").disabled = false;
   showToast(
-    added > 0
-      ? `${added}件保存完了${failed ? `（${failed}件失敗）` : ""}`
-      : "保存失敗",
+    added > 0 ? `${added}件保存完了${failed ? `（${failed}件失敗）` : ""}` : "保存失敗",
     added > 0 ? "success" : "error"
   );
   await loadList();
 });
 
+// フォルダ内のTXTファイル名（拡張子なし）をタイトルにする
 async function extractEntries(file) {
   const zip = await JSZip.loadAsync(file);
-  const folderMap = {};
+  const entries = [];
+
   for (const [path, entry] of Object.entries(zip.files)) {
     if (entry.dir || !path.endsWith(".txt")) continue;
-    const parts      = path.split("/").filter(Boolean);
-    const folderName = parts.length >= 2 ? parts[0] : "__root__";
-    const fileName   = parts[parts.length - 1];
-    if (!folderMap[folderName]) folderMap[folderName] = [];
-    const content = await entry.async("string");
-    folderMap[folderName].push({ fileName, content });
-  }
-  const entries = [];
-  for (const [folderName, txts] of Object.entries(folderMap)) {
-    const title = folderName === "__root__" ? txts[0]?.fileName.replace(".txt","") : folderName;
-    txts.sort((a, b) => a.fileName.localeCompare(b.fileName));
-    const content = txts.map(t => t.content).join("\n\n---\n\n");
-    entries.push({ title, content, ai_type: detectAI(title).key });
+
+    const parts    = path.split("/").filter(Boolean);
+    const fileName = parts[parts.length - 1]; // 例: CG-20240101.txt
+    // .txt を除いたファイル名をタイトルに
+    const title    = fileName.replace(/\.txt$/i, "");
+    const content  = await entry.async("string");
+    const ai       = detectAI(title);
+
+    entries.push({ title, content, ai_type: ai.key });
   }
   return entries;
 }
 
-// ── 一覧 ──
-let allRows = [], curFilter = "all", activeId = null;
+// ── 一覧（クライアント側で全件保持・フィルタ・検索）──
+let allRows    = [];
+let curFilter  = "all";
+let searchQ    = "";
+let activeId   = null;
+let listOffset = 0;
+const LIST_CHUNK = 100; // 一度に描画する件数
 
 async function loadList() {
   document.getElementById("file-list").innerHTML = '<div class="sidebar-empty">読み込み中…</div>';
   try {
-    allRows = await sbGetAll();
-    renderList();
+    allRows    = await sbGetAll("all", "");
+    listOffset = 0;
+    applyFilterAndRender();
   } catch (err) {
     document.getElementById("file-list").innerHTML = `<div class="sidebar-empty">読み込み失敗<br><small>${err.message}</small></div>`;
   }
 }
 
 function setFilter(ai) {
-  curFilter = ai;
+  curFilter  = ai;
+  listOffset = 0;
   document.querySelectorAll(".ftab").forEach(t => t.classList.toggle("active", t.dataset.ai === ai));
-  renderList();
+  applyFilterAndRender();
 }
 
 let searchTimer;
 function onSearch() {
   clearTimeout(searchTimer);
-  searchTimer = setTimeout(async () => {
-    const q = document.getElementById("search-input").value.trim();
-    allRows = q ? await sbSearch(q) : await sbGetAll();
-    renderList();
-  }, 350);
+  searchTimer = setTimeout(() => {
+    searchQ    = document.getElementById("search-input").value.trim();
+    listOffset = 0;
+    applyFilterAndRender();
+  }, 200);
 }
 
-function renderList() {
+function getFilteredRows() {
+  let rows = allRows;
+  if (curFilter !== "all") rows = rows.filter(r => r.ai_type === curFilter);
+  if (searchQ) {
+    const q = searchQ.toLowerCase();
+    rows = rows.filter(r => r.title.toLowerCase().includes(q));
+  }
+  return rows;
+}
+
+function applyFilterAndRender() {
+  const rows = getFilteredRows();
   const list = document.getElementById("file-list");
-  const rows = curFilter === "all" ? allRows : allRows.filter(r => r.ai_type === curFilter);
-  if (rows.length === 0) { list.innerHTML = '<div class="sidebar-empty">該当なし</div>'; return; }
   list.innerHTML = "";
-  rows.forEach(row => {
+
+  if (rows.length === 0) {
+    list.innerHTML = '<div class="sidebar-empty">該当なし</div>';
+    return;
+  }
+
+  renderChunk(rows, 0, list);
+}
+
+function renderChunk(rows, offset, list) {
+  const chunk = rows.slice(offset, offset + LIST_CHUNK);
+  chunk.forEach(row => {
     const ai  = aiInfo(row.ai_type);
     const div = document.createElement("div");
     div.className = "file-item" + (row.id === activeId ? " active" : "");
@@ -448,9 +507,22 @@ function renderList() {
         <span class="file-name">${escHtml(row.title)}</span>
       </div>
       <div class="file-date">${dateStr}</div>`;
-    div.onclick = () => { activeId = row.id; openLog(row.id, row.title, row.ai_type); closeMenu(); renderList(); };
+    div.onclick = () => { activeId = row.id; openLog(row.id, row.title, row.ai_type); closeMenu(); applyFilterAndRender(); };
     list.appendChild(div);
   });
+
+  // まだ残りがあれば「もっと見る」ボタン
+  const nextOffset = offset + LIST_CHUNK;
+  if (nextOffset < rows.length) {
+    const more = document.createElement("div");
+    more.className = "load-more";
+    more.textContent = `さらに表示（残り${rows.length - nextOffset}件）`;
+    more.onclick = () => {
+      more.remove();
+      renderChunk(rows, nextOffset, list);
+    };
+    list.appendChild(more);
+  }
 }
 
 // ── 会話表示 ──
@@ -495,11 +567,12 @@ function renderPage() {
   document.getElementById("btn-prev").disabled = curPage === 0;
   document.getElementById("btn-next").disabled = curPage === pages.length - 1;
 
-  const page = pages[curPage];
+  const page   = pages[curPage];
   const viewer = document.getElementById("viewer");
   viewer.innerHTML = "";
   const div = document.createElement("div");
   div.className = "viewer";
+
   if (page.user !== null) {
     const ub = document.createElement("div");
     ub.className = "msg-block msg-user";
@@ -535,7 +608,7 @@ async function clearAll() {
     document.getElementById("topbar-title").textContent = "AI会話ログ";
     document.getElementById("viewer").innerHTML = `<div class="placeholder"><div class="placeholder-icon">📂</div><div class="placeholder-text">ZIPを読み込むと<br>会話ログが表示される</div></div>`;
     document.getElementById("page-nav").classList.remove("show");
-    renderList();
+    document.getElementById("file-list").innerHTML = '<div class="sidebar-empty">まだ保存されてない</div>';
     showToast("全削除完了", "success");
   } catch (err) {
     showToast("削除失敗: " + err.message, "error");
