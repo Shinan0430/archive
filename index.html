@@ -200,7 +200,7 @@ const RETRY_MAX    = 3;
 const RETRY_DELAY  = 600;
 const PAGE_SIZE    = 1000;
 
-// ★★★ 強力な AI 判定ルール（拡張版：Grok は X数字-Grok / Grok- / 先頭Grok など完全対応）★★★
+// AI 判定ルール（Grok 拡張版: X数字-Grok / Grok- / 先頭Grok など完全対応）
 const AI_RULES = [
   { key: "chatgpt",  patterns: [/^CG-/i, /chatgpt/i],                         label: "ChatGPT",  cssClass: "ai-chatgpt" },
   { key: "grok",     patterns: [/^(?:X\d+-)?Grok[-_ ]/i, /^Grok[-_ ]/i, /Grok/i], label: "Grok",  cssClass: "ai-grok" },
@@ -209,19 +209,14 @@ const AI_RULES = [
   { key: "dola",     patterns: [/^Dola-/i, /dola/i],                           label: "Dola",     cssClass: "ai-dola" },
 ];
 
-// detectAI: ファイル名(拡張子除去)に対して、上から順にマッチ。より確実に "X123-Grok-xxx.txt" をGrok判定
 function detectAI(title) {
   if (!title) return { key: "other", label: "Other", cssClass: "ai-other" };
-  // 拡張子除去（安全のため）
   let base = title.replace(/\.(txt|md|log)$/i, "");
   for (const r of AI_RULES) {
     for (const pattern of r.patterns) {
-      if (pattern.test(base)) {
-        return r;
-      }
+      if (pattern.test(base)) return r;
     }
   }
-  // 最終フォールバック: ファイル名に "grok" が含まれるか大文字小文字無視で再チェック (念のため)
   if (/grok/i.test(base)) return { key: "grok", label: "Grok", cssClass: "ai-grok" };
   return { key: "other", label: "Other", cssClass: "ai-other" };
 }
@@ -230,7 +225,6 @@ function aiInfo(key) {
   return AI_RULES.find(r => r.key === key) || { key: "other", label: "Other", cssClass: "ai-other" };
 }
 
-// ファイル名からソート用数値抽出 (末尾の連番などを考慮)
 function extractSortKey(title) {
   const matches = title.match(/(\d+)/g);
   if (!matches) return 0;
@@ -239,26 +233,17 @@ function extractSortKey(title) {
   return firstNum * 10000 + lastNum;
 }
 
-// ── Supabase ──
-const SB_H = {
-  "Content-Type": "application/json",
-  "apikey": SUPABASE_KEY,
-  "Authorization": `Bearer ${SUPABASE_KEY}`
-};
-
+// Supabase
+const SB_H = { "Content-Type": "application/json", "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` };
 async function sbFetch(path, opts = {}) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
-    ...opts, headers: { ...SB_H, ...(opts.headers || {}) }
-  });
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { ...opts, headers: { ...SB_H, ...(opts.headers || {}) } });
   if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
   if (res.status === 204) return null;
   const ct = res.headers.get("content-type") || "";
   return ct.includes("json") ? res.json() : null;
 }
-
 async function sbGetAll() {
-  let allRows = [];
-  let offset = 0;
+  let allRows = [], offset = 0;
   while (true) {
     const rows = await sbFetch(`${TABLE}?select=id,title,ai_type,created_at&limit=1000&offset=${offset}`) || [];
     allRows = allRows.concat(rows);
@@ -268,14 +253,11 @@ async function sbGetAll() {
   allRows.sort((a, b) => extractSortKey(a.title) - extractSortKey(b.title));
   return allRows;
 }
-
 async function sbGetOne(id) {
   const rows = await sbFetch(`${TABLE}?id=eq.${id}&select=title,content,ai_type`) || [];
   return rows[0] || null;
 }
-
 const sbDeleteAll = () => sbFetch(`${TABLE}?id=gt.0`, { method: "DELETE", headers: { "Prefer": "return=minimal" } });
-
 let titleCache = null;
 async function ensureTitleCache() {
   if (titleCache !== null) return;
@@ -289,26 +271,16 @@ async function ensureTitleCache() {
   titleCache = {};
   for (const r of all) titleCache[r.title] = r.id;
 }
-
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-
 async function sbUpsertSafe(title, content, ai_type) {
   for (let attempt = 0; attempt <= RETRY_MAX; attempt++) {
     try {
       await ensureTitleCache();
       const existingId = titleCache[title];
       if (existingId) {
-        await sbFetch(`${TABLE}?id=eq.${existingId}`, {
-          method: "PATCH",
-          headers: { "Prefer": "return=minimal" },
-          body: JSON.stringify({ content, ai_type, created_at: new Date().toISOString() })
-        });
+        await sbFetch(`${TABLE}?id=eq.${existingId}`, { method: "PATCH", headers: { "Prefer": "return=minimal" }, body: JSON.stringify({ content, ai_type, created_at: new Date().toISOString() }) });
       } else {
-        const result = await sbFetch(TABLE, {
-          method: "POST",
-          headers: { "Prefer": "return=representation" },
-          body: JSON.stringify({ title, content, ai_type })
-        });
+        const result = await sbFetch(TABLE, { method: "POST", headers: { "Prefer": "return=representation" }, body: JSON.stringify({ title, content, ai_type }) });
         if (result?.[0]?.id) titleCache[title] = result[0].id;
       }
       return true;
@@ -320,7 +292,7 @@ async function sbUpsertSafe(title, content, ai_type) {
   return false;
 }
 
-// ── パスワード ──
+// パスワード
 document.getElementById("pw-input").addEventListener("keydown", e => { if (e.key === "Enter") checkPassword(); });
 function checkPassword() {
   const inp = document.getElementById("pw-input");
@@ -337,7 +309,7 @@ function checkPassword() {
   }
 }
 
-// ── UI State ──
+// UI 状態
 let menuOpen = false;
 function toggleMenu() {
   menuOpen = !menuOpen;
@@ -349,7 +321,6 @@ function closeMenu() {
   menuOpen = false;
   ["sidebar","overlay","menu-btn"].forEach(id => document.getElementById(id).classList.remove("open"));
 }
-
 let toastTimer;
 function showToast(msg, type = "") {
   const t = document.getElementById("toast");
@@ -357,7 +328,6 @@ function showToast(msg, type = "") {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => t.className = "", 3000);
 }
-
 function showProgress(cur, total) {
   document.getElementById("progress-bar-wrap").classList.add("show");
   document.getElementById("main").classList.add("with-progress");
@@ -369,23 +339,110 @@ function hideProgress() {
   document.getElementById("main").classList.remove("with-progress");
 }
 
-// ── ファイルリスト管理 ──
-let allFiles = [];           // { id, title, ai_type, created_at }
+// ファイルリスト + ページ送り (Viewer内ページング)
+let allFiles = [];
 let currentFilter = "all";
 let currentSearch = "";
 let listPage = 1;
 let currentFileId = null;
 let currentLogContent = null;
+let currentPages = [];      // 分割されたページ本文の配列
+let currentPageIdx = 0;    // 0-indexed
+
+// 会話ログを「私：」「AI：」で分割してページ分割
+function splitConversationIntoPages(content) {
+  const lines = content.split(/\r?\n/);
+  const blocks = [];
+  let i = 0;
+  while (i < lines.length) {
+    let line = lines[i];
+    if (line.startsWith("私：") || line.startsWith("User:")) {
+      let userText = line.substring(line.indexOf("：")+1).trim();
+      if (userText === "") userText = line.substring(line.indexOf(":")+1).trim();
+      let blockHtml = `<div class="msg-block"><div class="msg-user"><div class="msg-user-label">私</div><div class="msg-text">${escapeHtml(userText)}</div></div>`;
+      i++;
+      let aiLines = [];
+      while (i < lines.length && !lines[i].startsWith("私：") && !lines[i].startsWith("User:")) {
+        let cur = lines[i];
+        if (cur.startsWith("AI：") || cur.startsWith("Assistant:") || cur.startsWith("AI:")) {
+          let aiText = cur.substring(cur.indexOf("：")+1).trim();
+          if (aiText === "") aiText = cur.substring(cur.indexOf(":")+1).trim();
+          aiLines.push(aiText);
+        } else if (cur.trim() !== "") {
+          if (aiLines.length === 0) aiLines.push(cur);
+          else aiLines[aiLines.length-1] += "\n" + cur;
+        }
+        i++;
+      }
+      if (aiLines.length) {
+        blockHtml += `<div class="msg-ai"><div class="msg-ai-label">AI</div><div class="msg-text">${escapeHtml(aiLines.join("\n\n"))}</div></div>`;
+      }
+      blockHtml += `</div>`;
+      blocks.push(blockHtml);
+    } else if (line.startsWith("AI：") || line.startsWith("Assistant:") || line.startsWith("AI:")) {
+      let aiText = line.substring(line.indexOf("：")+1).trim();
+      if (aiText === "") aiText = line.substring(line.indexOf(":")+1).trim();
+      let fullAi = aiText;
+      i++;
+      while (i < lines.length && !lines[i].startsWith("私：") && !lines[i].startsWith("User:") && !lines[i].startsWith("AI：") && !lines[i].startsWith("Assistant:") && !lines[i].startsWith("AI:")) {
+        if (lines[i].trim() !== "") fullAi += "\n" + lines[i];
+        i++;
+      }
+      blocks.push(`<div class="msg-block"><div class="msg-ai"><div class="msg-ai-label">AI</div><div class="msg-text">${escapeHtml(fullAi.trim())}</div></div></div>`);
+    } else {
+      i++;
+    }
+  }
+  if (blocks.length === 0) blocks.push(`<div class="msg-block"><div class="msg-ai"><div class="msg-ai-label">ログ内容</div><div class="msg-text">${escapeHtml(content)}</div></div></div>`);
+  // 1ページあたり最大3ブロックで分割
+  const pageSizeBlocks = 3;
+  const pages = [];
+  for (let idx = 0; idx < blocks.length; idx += pageSizeBlocks) {
+    pages.push(blocks.slice(idx, idx+pageSizeBlocks).join(''));
+  }
+  return pages;
+}
+
+function renderViewerWithPagination(title, content) {
+  currentPages = splitConversationIntoPages(content);
+  currentPageIdx = 0;
+  const total = currentPages.length;
+  if (total === 0) {
+    document.getElementById("viewer").innerHTML = `<div class="placeholder"><div class="placeholder-text">表示できる会話がありません</div></div>`;
+    document.getElementById("page-nav").classList.remove("show");
+    return;
+  }
+  document.getElementById("viewer").innerHTML = `<div class="viewer">${currentPages[0]}</div>`;
+  if (total > 1) {
+    document.getElementById("page-nav").classList.add("show");
+    document.getElementById("page-info").innerText = `${currentPageIdx+1} / ${total}`;
+    document.getElementById("page-title-nav").innerText = title;
+    const prevBtn = document.getElementById("btn-prev");
+    const nextBtn = document.getElementById("btn-next");
+    if (prevBtn) prevBtn.disabled = (currentPageIdx === 0);
+    if (nextBtn) nextBtn.disabled = (currentPageIdx === total-1);
+  } else {
+    document.getElementById("page-nav").classList.remove("show");
+  }
+}
+
+function changePage(delta) {
+  if (!currentPages.length) return;
+  const newIdx = currentPageIdx + delta;
+  if (newIdx < 0 || newIdx >= currentPages.length) return;
+  currentPageIdx = newIdx;
+  document.getElementById("viewer").innerHTML = `<div class="viewer">${currentPages[currentPageIdx]}</div>`;
+  document.getElementById("page-info").innerText = `${currentPageIdx+1} / ${currentPages.length}`;
+  const prevBtn = document.getElementById("btn-prev");
+  const nextBtn = document.getElementById("btn-next");
+  if (prevBtn) prevBtn.disabled = (currentPageIdx === 0);
+  if (nextBtn) nextBtn.disabled = (currentPageIdx === currentPages.length-1);
+}
 
 function getFilteredFiles() {
   let filtered = [...allFiles];
-  if (currentFilter !== "all") {
-    filtered = filtered.filter(f => f.ai_type === currentFilter);
-  }
-  if (currentSearch.trim()) {
-    const kw = currentSearch.trim().toLowerCase();
-    filtered = filtered.filter(f => f.title.toLowerCase().includes(kw));
-  }
+  if (currentFilter !== "all") filtered = filtered.filter(f => f.ai_type === currentFilter);
+  if (currentSearch.trim()) { const kw = currentSearch.trim().toLowerCase(); filtered = filtered.filter(f => f.title.toLowerCase().includes(kw)); }
   return filtered;
 }
 
@@ -396,59 +453,33 @@ function renderFileList() {
   if (totalPages > 0 && listPage > totalPages) listPage = totalPages;
   const start = (listPage - 1) * PAGE_SIZE;
   const pageItems = filtered.slice(start, start + PAGE_SIZE);
-  
   if (pageItems.length === 0) {
     container.innerHTML = `<div class="sidebar-empty">📭 ファイルがありません<br>ZIPをアップロードしてください</div>`;
   } else {
     container.innerHTML = pageItems.map(f => {
       const ai = aiInfo(f.ai_type);
       const isActive = currentFileId === f.id;
-      return `
-        <div class="file-item ${isActive ? 'active' : ''}" data-id="${f.id}">
-          <div class="file-item-top">
-            <span class="ai-badge ${ai.cssClass}">${ai.label}</span>
-            <span class="file-name">${escapeHtml(f.title)}</span>
-          </div>
+      return `<div class="file-item ${isActive ? 'active' : ''}" data-id="${f.id}">
+          <div class="file-item-top"><span class="ai-badge ${ai.cssClass}">${ai.label}</span><span class="file-name">${escapeHtml(f.title)}</span></div>
           <div class="file-date">${f.created_at ? new Date(f.created_at).toLocaleString() : ''}</div>
-        </div>
-      `;
+        </div>`;
     }).join('');
-    container.querySelectorAll('.file-item').forEach(el => {
-      el.addEventListener('click', (e) => {
-        const id = el.getAttribute('data-id');
-        if (id) loadAndViewLog(id);
-      });
-    });
+    container.querySelectorAll('.file-item').forEach(el => { el.addEventListener('click', () => { const id = el.getAttribute('data-id'); if(id) loadAndViewLog(id); }); });
   }
-  
   const pagDiv = document.getElementById("list-pagination");
   if (totalPages <= 1) { pagDiv.innerHTML = ''; return; }
-  pagDiv.innerHTML = `
-    <button class="list-page-btn" id="list-prev" ${listPage===1?'disabled':''}>←</button>
-    <span class="list-page-info">${listPage} / ${totalPages}</span>
-    <button class="list-page-btn" id="list-next" ${listPage===totalPages?'disabled':''}>→</button>
-  `;
-  document.getElementById("list-prev")?.addEventListener('click', () => {
-    if (listPage > 1) { listPage--; renderFileList(); }
-  });
-  document.getElementById("list-next")?.addEventListener('click', () => {
-    if (listPage < totalPages) { listPage++; renderFileList(); }
-  });
+  pagDiv.innerHTML = `<button class="list-page-btn" id="list-prev" ${listPage===1?'disabled':''}>←</button><span class="list-page-info">${listPage} / ${totalPages}</span><button class="list-page-btn" id="list-next" ${listPage===totalPages?'disabled':''}>→</button>`;
+  document.getElementById("list-prev")?.addEventListener('click', () => { if (listPage > 1) { listPage--; renderFileList(); } });
+  document.getElementById("list-next")?.addEventListener('click', () => { if (listPage < totalPages) { listPage++; renderFileList(); } });
 }
 
 async function loadList() {
   try {
     allFiles = await sbGetAll();
     renderFileList();
-    if (currentFileId && allFiles.some(f=>f.id===currentFileId)) {
-      loadAndViewLog(currentFileId);
-    } else if (allFiles.length > 0) {
-      loadAndViewLog(allFiles[0].id);
-    } else {
-      document.getElementById("viewer").innerHTML = `<div class="placeholder"><div class="placeholder-icon">📄</div><div class="placeholder-text">ログがありません<br>ZIPをアップロードしてください</div></div>`;
-      document.getElementById("page-nav").classList.remove("show");
-      currentFileId = null;
-    }
+    if (currentFileId && allFiles.some(f=>f.id===currentFileId)) loadAndViewLog(currentFileId);
+    else if (allFiles.length > 0) loadAndViewLog(allFiles[0].id);
+    else { document.getElementById("viewer").innerHTML = `<div class="placeholder"><div class="placeholder-icon">📄</div><div class="placeholder-text">ログがありません<br>ZIPをアップロードしてください</div></div>`; document.getElementById("page-nav").classList.remove("show"); currentFileId = null; }
   } catch(e) { showToast("一覧読み込み失敗:"+e.message, "error"); }
 }
 
@@ -459,65 +490,15 @@ async function loadAndViewLog(id) {
     if (!data) throw new Error("データなし");
     currentFileId = id;
     currentLogContent = data.content;
-    renderViewer(data.title, data.content);
-    renderFileList(); // active style更新
+    renderViewerWithPagination(data.title, data.content);
+    renderFileList();
     document.getElementById("topbar-title").innerText = data.title;
   } catch(e) { showToast("ログ読込失敗:"+e.message, "error"); }
 }
 
-function renderViewer(title, content) {
-  const lines = content.split(/\r?\n/);
-  let html = `<div class="viewer">`;
-  let i = 0;
-  const total = lines.length;
-  while (i < total) {
-    let line = lines[i];
-    if (line.startsWith("User:")) {
-      let userText = line.substring(5).trim();
-      html += `<div class="msg-block"><div class="msg-user"><div class="msg-user-label">USER</div><div class="msg-text">${escapeHtml(userText)}</div></div>`;
-      i++;
-      let aiBlock = "";
-      while (i < total && !lines[i].startsWith("User:")) {
-        if (lines[i].startsWith("Assistant:") || lines[i].startsWith("AI:")) {
-          let aiLine = lines[i];
-          let aiRaw = aiLine.substring(aiLine.indexOf(":")+1).trim();
-          aiBlock += aiRaw + "\n";
-        } else if (lines[i].trim() !== "") {
-          aiBlock += lines[i] + "\n";
-        }
-        i++;
-      }
-      if (aiBlock.trim()) {
-        html += `<div class="msg-ai"><div class="msg-ai-label">AI</div><div class="msg-text">${escapeHtml(aiBlock.trim())}</div></div>`;
-      }
-      html += `</div>`;
-    } else if (line.startsWith("Assistant:") || line.startsWith("AI:")) {
-      let aiRaw = line.substring(line.indexOf(":")+1).trim();
-      let fullAi = aiRaw;
-      i++;
-      while (i < total && !lines[i].startsWith("User:") && !lines[i].startsWith("Assistant:") && !lines[i].startsWith("AI:")) {
-        if (lines[i].trim() !== "") fullAi += "\n" + lines[i];
-        i++;
-      }
-      html += `<div class="msg-block"><div class="msg-ai"><div class="msg-ai-label">AI</div><div class="msg-text">${escapeHtml(fullAi.trim())}</div></div></div>`;
-    } else {
-      i++;
-    }
-  }
-  if (!html.includes("msg-block")) {
-    html += `<div class="msg-block"><div class="msg-ai"><div class="msg-ai-label">ログ内容</div><div class="msg-text">${escapeHtml(content)}</div></div></div>`;
-  }
-  html += `</div>`;
-  document.getElementById("viewer").innerHTML = html;
-  document.getElementById("page-nav").classList.remove("show");
-}
+function escapeHtml(str) { return str.replace(/[&<>]/g, function(m){ if(m==='&') return '&amp;'; if(m==='<') return '&lt;'; if(m==='>') return '&gt;'; return m;}); }
 
-function escapeHtml(str) { return str.replace(/[&<>]/g, function(m){if(m==='&') return '&amp;'; if(m==='<') return '&lt;'; if(m==='>') return '&gt;'; return m;}); }
-
-// ZIP処理: テキストファイルを読み取り、AI種別を正しく判別してSupabaseへ
 async function processZipFiles(files) {
-  const totalFiles = files.length;
-  let success = 0;
   let queue = [];
   for (let i=0; i<files.length; i++) {
     const file = files[i];
@@ -525,9 +506,7 @@ async function processZipFiles(files) {
     try {
       const zip = await JSZip.loadAsync(file);
       const textFiles = [];
-      zip.forEach((relPath, zipEntry) => {
-        if (!zipEntry.dir && /\.(txt|md|log)$/i.test(relPath)) textFiles.push(relPath);
-      });
+      zip.forEach((relPath, zipEntry) => { if (!zipEntry.dir && /\.(txt|md|log)$/i.test(relPath)) textFiles.push(relPath); });
       for (const relPath of textFiles) {
         const raw = await zip.file(relPath).async("string");
         const title = relPath.split('/').pop();
@@ -538,15 +517,10 @@ async function processZipFiles(files) {
   }
   if (queue.length === 0) { showToast("テキストファイルがZIP内に見つかりません", "error"); return; }
   showProgress(0, queue.length);
-  let done = 0;
+  let done = 0, success = 0;
   for (let i=0; i<queue.length; i+=BATCH_SIZE) {
     const batch = queue.slice(i, i+BATCH_SIZE);
-    await Promise.all(batch.map(async (item) => {
-      const ok = await sbUpsertSafe(item.title, item.content, item.ai_type);
-      if (ok) success++;
-      done++;
-      showProgress(done, queue.length);
-    }));
+    await Promise.all(batch.map(async (item) => { const ok = await sbUpsertSafe(item.title, item.content, item.ai_type); if (ok) success++; done++; showProgress(done, queue.length); }));
   }
   hideProgress();
   showToast(`${success} / ${queue.length} 件保存完了`, "success");
@@ -560,34 +534,11 @@ document.getElementById("zipInput").addEventListener("change", async (e) => {
   e.target.value = "";
 });
 
-window.setFilter = (filter) => {
-  currentFilter = filter;
-  listPage = 1;
-  document.querySelectorAll(".ftab").forEach(tab => tab.classList.remove("active"));
-  document.querySelector(`.ftab[data-ai="${filter}"]`).classList.add("active");
-  renderFileList();
-};
-window.setSearch = () => {
-  currentSearch = document.getElementById("search-input").value;
-  listPage = 1;
-  renderFileList();
-};
+window.setFilter = (filter) => { currentFilter = filter; listPage = 1; document.querySelectorAll(".ftab").forEach(tab => tab.classList.remove("active")); document.querySelector(`.ftab[data-ai="${filter}"]`).classList.add("active"); renderFileList(); };
+window.setSearch = () => { currentSearch = document.getElementById("search-input").value; listPage = 1; renderFileList(); };
 document.getElementById("search-input").addEventListener("input", () => window.setSearch());
-
-window.clearAll = async () => {
-  if (!confirm("全てのログを削除します。よろしいですか？")) return;
-  try {
-    await sbDeleteAll();
-    titleCache = null;
-    allFiles = [];
-    currentFileId = null;
-    renderFileList();
-    document.getElementById("viewer").innerHTML = `<div class="placeholder"><div class="placeholder-icon">🗑️</div><div class="placeholder-text">全て削除されました</div></div>`;
-    showToast("全ログを削除しました", "success");
-  } catch(e) { showToast("削除失敗:"+e.message, "error"); }
-};
-
-window.changePage = (delta) => {};
+window.clearAll = async () => { if (!confirm("全てのログを削除します。よろしいですか？")) return; try { await sbDeleteAll(); titleCache = null; allFiles = []; currentFileId = null; renderFileList(); document.getElementById("viewer").innerHTML = `<div class="placeholder"><div class="placeholder-icon">🗑️</div><div class="placeholder-text">全て削除されました</div></div>`; showToast("全ログを削除しました", "success"); } catch(e) { showToast("削除失敗:"+e.message, "error"); } };
+window.changePage = changePage;
 </script>
 </body>
 </html>
