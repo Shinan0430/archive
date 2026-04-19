@@ -15,6 +15,7 @@
   --success: #34d399; --error: #f87171; --topbar: 52px;
   --chatgpt: #10a37f; --grok: #1d9bf0; --deepseek: #4f8ef7;
   --claude: #c96442; --dola: #e040fb;
+  --highlight: #fbbf24;
 }
 html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: 'Noto Sans JP', sans-serif; font-size: 14px; -webkit-font-smoothing: antialiased; }
 
@@ -52,12 +53,15 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 
 .sidebar-overlay { position: fixed; inset: 0; top: var(--topbar); background: rgba(0,0,0,0.5); z-index: 90; opacity: 0; pointer-events: none; transition: opacity 0.25s; }
 .sidebar-overlay.open { opacity: 1; pointer-events: all; }
-.sidebar { position: fixed; top: var(--topbar); left: 0; width: min(290px, 85vw); height: calc(100% - var(--topbar)); background: var(--surface); border-right: 1px solid var(--border); overflow: hidden; z-index: 95; transform: translateX(-100%); transition: transform 0.25s cubic-bezier(0.4,0,0.2,1); display: flex; flex-direction: column; }
+.sidebar { position: fixed; top: var(--topbar); left: 0; width: min(320px, 88vw); height: calc(100% - var(--topbar)); background: var(--surface); border-right: 1px solid var(--border); overflow: hidden; z-index: 95; transform: translateX(-100%); transition: transform 0.25s cubic-bezier(0.4,0,0.2,1); display: flex; flex-direction: column; }
 .sidebar.open { transform: translateX(0); }
 
-.search-box { padding: 10px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.search-box { padding: 10px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0; display: flex; flex-direction: column; gap: 8px; }
 .search-input { width: 100%; padding: 8px 12px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 13px; font-family: 'Noto Sans JP', sans-serif; outline: none; }
 .search-input:focus { border-color: var(--accent); }
+.search-mode { display: flex; gap: 8px; }
+.search-mode label { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 4px; cursor: pointer; }
+.search-mode input[type="radio"] { accent-color: var(--accent); width: 14px; height: 14px; }
 
 .filter-tabs { display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0; overflow-x: auto; scrollbar-width: none; }
 .filter-tabs::-webkit-scrollbar { display: none; }
@@ -73,13 +77,18 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 .list-page-btn:disabled { opacity: 0.3; cursor: default; }
 .list-page-info { font-size: 11px; color: var(--muted); font-family: 'JetBrains Mono', monospace; min-width: 60px; text-align: center; }
 
-.file-item { padding: 12px 14px; border-bottom: 1px solid var(--border); cursor: pointer; display: flex; flex-direction: column; gap: 4px; transition: background 0.15s; }
+.file-item { padding: 10px 12px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background 0.15s; }
 .file-item:active, .file-item.active { background: var(--surface2); }
-.file-item-top { display: flex; align-items: center; gap: 6px; }
+.file-item-top { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
 .ai-badge { font-size: 10px; font-family: 'JetBrains Mono', monospace; padding: 2px 6px; border-radius: 4px; flex-shrink: 0; font-weight: 500; }
 .file-name { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
 .file-item.active .file-name { color: var(--accent2); }
-.file-date { font-size: 10px; color: var(--muted); font-family: 'JetBrains Mono', monospace; }
+.file-date { font-size: 10px; color: var(--muted); font-family: 'JetBrains Mono', monospace; margin-bottom: 6px; }
+.search-snippets { margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--border); }
+.search-snippet { font-size: 11px; line-height: 1.6; color: var(--muted); padding: 4px 0; }
+.search-snippet .highlight { background: var(--highlight); color: #000; padding: 1px 2px; border-radius: 2px; font-weight: 500; }
+.search-more { font-size: 10px; color: var(--accent2); margin-top: 4px; cursor: pointer; }
+.search-stats { font-size: 11px; color: var(--muted); padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--surface2); }
 
 .ai-chatgpt  { background: rgba(16,163,127,0.15); color: var(--chatgpt); }
 .ai-grok     { background: rgba(29,155,240,0.15); color: var(--grok); }
@@ -113,6 +122,7 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 .msg-ai { padding: 12px 0; border-bottom: 1px solid var(--border); }
 .msg-ai-label { font-size: 10px; margin-bottom: 6px; font-family: 'JetBrains Mono', monospace; letter-spacing: 1px; }
 .msg-text { white-space: pre-wrap; word-break: break-word; font-size: 13px; line-height: 1.85; }
+.msg-text .highlight { background: var(--highlight); color: #000; padding: 1px 2px; border-radius: 2px; font-weight: 500; }
 
 #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px); background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 10px 18px; border-radius: 8px; font-size: 13px; z-index: 999; transition: transform 0.3s, opacity 0.3s; opacity: 0; white-space: nowrap; max-width: 88vw; overflow: hidden; text-overflow: ellipsis; }
 #toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
@@ -154,7 +164,11 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 <div class="sidebar-overlay" id="overlay" onclick="closeMenu()"></div>
 <div class="sidebar" id="sidebar">
   <div class="search-box">
-    <input class="search-input" id="search-input" placeholder="🔍 タイトルを検索…">
+    <input class="search-input" id="search-input" placeholder="🔍 検索...">
+    <div class="search-mode">
+      <label><input type="radio" name="searchMode" value="title" checked> タイトルのみ</label>
+      <label><input type="radio" name="searchMode" value="content"> 内容も検索</label>
+    </div>
   </div>
   <div class="filter-tabs">
     <div class="ftab active" data-ai="all"      onclick="setFilter('all')">すべて</div>
@@ -164,6 +178,7 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
     <div class="ftab" data-ai="claude"   onclick="setFilter('claude')"><span class="dot" style="background:var(--claude)"></span>Claude</div>
     <div class="ftab" data-ai="dola"     onclick="setFilter('dola')"><span class="dot" style="background:var(--dola)"></span>Dola</div>
   </div>
+  <div id="search-stats" class="search-stats" style="display:none;"></div>
   <div class="file-list-wrap" id="file-list-wrap">
     <div id="file-list" style="flex:1"></div>
     <div class="list-pagination" id="list-pagination"></div>
@@ -171,7 +186,6 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 </div>
 
 <div class="main" id="main">
-  <!-- ナビバー: |← ← [ページ情報] → →| -->
   <div class="page-nav" id="page-nav">
     <button class="nav-btn edge" id="btn-first" onclick="changePage('first')" title="最初のページ">|←</button>
     <button class="nav-btn" id="btn-prev"  onclick="changePage(-1)"     title="前のページ">←</button>
@@ -202,7 +216,7 @@ const TABLE        = "logs";
 const BATCH_SIZE   = 5;
 const RETRY_MAX    = 3;
 const RETRY_DELAY  = 600;
-const LIST_PAGE_SIZE = 100; // サイドバー1ページあたりの件数
+const LIST_PAGE_SIZE = 100;
 
 // AI 判定ルール
 const AI_RULES = [
@@ -213,7 +227,6 @@ const AI_RULES = [
   { key: "dola",     patterns: [/^Dola-/i, /dola/i],                                label: "Dola",     cssClass: "ai-dola" },
 ];
 
-// 「私：」の中でAI返答の区切りとなるラベル
 const AI_SPEAKER_LABELS = ["ChatGPT", "Grok", "Claude", "DeepSeek", "Dola"];
 
 function detectAI(title) {
@@ -266,6 +279,8 @@ async function sbGetOne(id) {
 }
 const sbDeleteAll = () => sbFetch(`${TABLE}?id=gt.0`, { method: "DELETE", headers: { "Prefer": "return=minimal" } });
 let titleCache = null;
+let contentCache = new Map(); // id -> content
+
 async function ensureTitleCache() {
   if (titleCache !== null) return;
   let all = [], offset = 0;
@@ -278,6 +293,17 @@ async function ensureTitleCache() {
   titleCache = {};
   for (const r of all) titleCache[r.title] = r.id;
 }
+
+async function getContent(id) {
+  if (contentCache.has(id)) return contentCache.get(id);
+  const row = await sbGetOne(id);
+  if (row) {
+    contentCache.set(id, row.content);
+    return row.content;
+  }
+  return null;
+}
+
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 async function sbUpsertSafe(title, content, ai_type) {
   for (let attempt = 0; attempt <= RETRY_MAX; attempt++) {
@@ -286,9 +312,13 @@ async function sbUpsertSafe(title, content, ai_type) {
       const existingId = titleCache[title];
       if (existingId) {
         await sbFetch(`${TABLE}?id=eq.${existingId}`, { method: "PATCH", headers: { "Prefer": "return=minimal" }, body: JSON.stringify({ content, ai_type, created_at: new Date().toISOString() }) });
+        contentCache.set(existingId, content);
       } else {
         const result = await sbFetch(TABLE, { method: "POST", headers: { "Prefer": "return=representation" }, body: JSON.stringify({ title, content, ai_type }) });
-        if (result?.[0]?.id) titleCache[title] = result[0].id;
+        if (result?.[0]?.id) {
+          titleCache[title] = result[0].id;
+          contentCache.set(result[0].id, content);
+        }
       }
       return true;
     } catch (err) {
@@ -346,13 +376,76 @@ function hideProgress() {
   document.getElementById("main").classList.remove("with-progress");
 }
 
+// ── 検索機能 ──────────────────────────────────────────
+function escapeRegex(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function highlightText(text, query) {
+  if (!query) return escHtml(text);
+  const escaped = escapeRegex(query);
+  const regex = new RegExp(`(${escaped})`, 'gi');
+  return escHtml(text).replace(regex, '<span class="highlight">$1</span>');
+}
+
+function getSnippetAroundMatch(content, query, maxLines = 3) {
+  if (!query || !content) return [];
+  const lines = content.split('\n');
+  const queryLower = query.toLowerCase();
+  const snippets = [];
+  const seen = new Set();
+  
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].toLowerCase().includes(queryLower)) {
+      const start = Math.max(0, i - 1);
+      const end = Math.min(lines.length, i + 2);
+      const key = `${start}-${end}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        const snippetLines = lines.slice(start, end);
+        const snippet = snippetLines.join('\n');
+        snippets.push({
+          text: snippet,
+          lineNum: i + 1,
+          highlighted: highlightText(snippet, query)
+        });
+      }
+    }
+  }
+  return snippets.slice(0, 5);
+}
+
+async function searchContent(query) {
+  const results = [];
+  const queryLower = query.toLowerCase();
+  
+  for (const file of allFiles) {
+    const content = await getContent(file.id);
+    if (!content) continue;
+    
+    const snippets = getSnippetAroundMatch(content, query);
+    if (snippets.length > 0) {
+      results.push({
+        ...file,
+        snippets,
+        matchCount: snippets.length
+      });
+    }
+  }
+  
+  return results.sort((a, b) => b.matchCount - a.matchCount);
+}
+
 // ── サイドバー ファイルリスト ──────────────────────────
 let allFiles      = [];
 let filteredFiles = [];
+let searchResults = [];
 let listPage      = 0;
 let currentFilter = "all";
 let currentSearch = "";
+let searchMode    = "title";
 let activeFileId  = null;
+let isSearching   = false;
 
 async function loadList() {
   try {
@@ -363,13 +456,39 @@ async function loadList() {
   }
 }
 
-function applyFilter() {
-  const q = currentSearch.trim().toLowerCase();
-  filteredFiles = allFiles.filter(f => {
+async function applyFilter() {
+  const q = currentSearch.trim();
+  const mode = document.querySelector('input[name="searchMode"]:checked')?.value || 'title';
+  
+  let aiFiltered = allFiles.filter(f => {
     const aiMatch = currentFilter === "all" || f.ai_type === currentFilter;
-    const textMatch = !q || f.title.toLowerCase().includes(q);
-    return aiMatch && textMatch;
+    const titleMatch = !q || f.title.toLowerCase().includes(q.toLowerCase());
+    return aiMatch && (mode === 'title' ? titleMatch : true);
   });
+  
+  if (mode === 'content' && q) {
+    isSearching = true;
+    document.getElementById("search-stats").style.display = "block";
+    document.getElementById("search-stats").textContent = "検索中...";
+    renderFileList();
+    
+    searchResults = await searchContent(q);
+    
+    // タイトルフィルタとAIフィルタを適用
+    const filteredResults = searchResults.filter(f => {
+      const aiMatch = currentFilter === "all" || f.ai_type === currentFilter;
+      return aiMatch;
+    });
+    
+    filteredFiles = filteredResults;
+    document.getElementById("search-stats").textContent = `${filteredFiles.length}件のファイルに一致`;
+    isSearching = false;
+  } else {
+    filteredFiles = aiFiltered;
+    searchResults = [];
+    document.getElementById("search-stats").style.display = "none";
+  }
+  
   listPage = 0;
   renderFileList();
 }
@@ -385,29 +504,52 @@ document.getElementById("search-input").addEventListener("input", e => {
   applyFilter();
 });
 
+document.querySelectorAll('input[name="searchMode"]').forEach(radio => {
+  radio.addEventListener("change", () => {
+    searchMode = radio.value;
+    applyFilter();
+  });
+});
+
 function renderFileList() {
   const wrap = document.getElementById("file-list");
   const pageTotal = Math.ceil(filteredFiles.length / LIST_PAGE_SIZE) || 1;
   const start = listPage * LIST_PAGE_SIZE;
   const slice = filteredFiles.slice(start, start + LIST_PAGE_SIZE);
+  const q = currentSearch.trim();
+  const mode = document.querySelector('input[name="searchMode"]:checked')?.value || 'title';
 
-  if (filteredFiles.length === 0) {
-    wrap.innerHTML = `<div class="sidebar-empty">ファイルがない</div>`;
+  if (isSearching) {
+    wrap.innerHTML = `<div class="sidebar-empty">検索中...</div>`;
+  } else if (filteredFiles.length === 0) {
+    wrap.innerHTML = `<div class="sidebar-empty">${q ? '一致するファイルなし' : 'ファイルがない'}</div>`;
   } else {
     wrap.innerHTML = slice.map(f => {
       const ai = aiInfo(f.ai_type);
       const date = f.created_at ? f.created_at.slice(0,10) : "";
+      
+      let snippetsHtml = "";
+      if (mode === 'content' && q && f.snippets && f.snippets.length > 0) {
+        const displaySnippets = f.snippets.slice(0, 3);
+        snippetsHtml = `<div class="search-snippets">` +
+          displaySnippets.map(s => 
+            `<div class="search-snippet">...${s.highlighted}...</div>`
+          ).join('') +
+          (f.snippets.length > 3 ? `<div class="search-more">他 ${f.snippets.length - 3} 件の一致</div>` : '') +
+          `</div>`;
+      }
+      
       return `<div class="file-item${f.id === activeFileId ? ' active' : ''}" onclick="openFile(${f.id})">
         <div class="file-item-top">
           <span class="ai-badge ${ai.cssClass}">${ai.label}</span>
-          <span class="file-name">${escHtml(f.title)}</span>
+          <span class="file-name">${mode === 'title' && q ? highlightText(f.title, q) : escHtml(f.title)}</span>
         </div>
         <div class="file-date">${date}</div>
+        ${snippetsHtml}
       </div>`;
     }).join("");
   }
 
-  // サイドバーページネーション
   const pg = document.getElementById("list-pagination");
   if (pageTotal <= 1) { pg.innerHTML = ""; return; }
   pg.innerHTML = `
@@ -423,9 +565,10 @@ function listPageMove(d) {
 }
 
 // ── ファイルを開く & ページ解析 ───────────────────────
-let pages       = [];  // 各要素: { userText, turns: [{speaker, text}] }
+let pages       = [];
 let currentPage = 0;
 let currentFileTitle = "";
+let currentSearchQuery = "";
 
 async function openFile(id) {
   activeFileId = id;
@@ -444,33 +587,13 @@ async function openFile(id) {
   }
 }
 
-/**
- * テキストを「私：」ブロックでページ分割する。
- *
- * 各「私：」ブロック内で「ChatGPT：」「Grok：」「Claude：」「DeepSeek：」「Dola：」
- * という行があればそこでAI返答の区切りとして扱い、
- * 直前のテキストを「私」の発言、以降をそのAIの返答として記録する。
- *
- * 構造例:
- *   私：
- *   ○○について教えて
- *   ChatGPT：
- *   ...返答...
- *   Grok：
- *   ...返答...
- *
- * → page.userText = "○○について教えて"
- *    page.turns = [{speaker:"ChatGPT", text:"..."}, {speaker:"Grok", text:"..."}]
- */
 function parsePages(content) {
   if (!content) return [];
 
   const lines = content.split("\n");
-  // 「私：」で始まる行のインデックスを探す
   const watashiPattern = /^私[：:]\s*/;
   const aiSpeakerPattern = new RegExp(`^(${AI_SPEAKER_LABELS.join("|")})[：:]\\s*`);
 
-  // まず「私：」の行でブロック分割
   const blocks = [];
   let cur = null;
   for (let i = 0; i < lines.length; i++) {
@@ -480,19 +603,15 @@ function parsePages(content) {
     } else if (cur !== null) {
       cur.lines.push(lines[i]);
     }
-    // 「私：」より前の行は無視（前書きなどがある場合）
   }
   if (cur !== null) blocks.push(cur);
 
   if (blocks.length === 0) {
-    // 「私：」がないファイルは1ページで全文表示
     return [{ userText: content, turns: [] }];
   }
 
   return blocks.map(block => {
-    // ブロック内の行リスト
     const bLines = block.lines;
-    // 最初の行は「私：xxx」→ userText の冒頭
     const firstLine = bLines[0].replace(watashiPattern, "");
 
     const turns = [];
@@ -503,11 +622,9 @@ function parsePages(content) {
     for (let i = 1; i < bLines.length; i++) {
       const m = bLines[i].match(aiSpeakerPattern);
       if (m) {
-        // 前のターンを確定
         if (currentSpeaker !== null) {
           turns.push({ speaker: currentSpeaker, text: currentTurnLines.join("\n").trim() });
         } else {
-          // AI区切り前のテキストはuserPartsに追加
           const extra = userParts.concat(currentTurnLines).join("\n").trim();
           userParts = extra ? [extra] : [];
         }
@@ -522,7 +639,6 @@ function parsePages(content) {
         }
       }
     }
-    // 最後のターンを確定
     if (currentSpeaker !== null) {
       turns.push({ speaker: currentSpeaker, text: currentTurnLines.join("\n").trim() });
     } else if (currentTurnLines.length > 0) {
@@ -536,9 +652,12 @@ function parsePages(content) {
   });
 }
 
-// ── ページ描画 ────────────────────────────────────────
+// ── ページ描画（ハイライト付き） ────────────────────────
 function renderPage() {
   const nav = document.getElementById("page-nav");
+  const q = currentSearch.trim();
+  const mode = document.querySelector('input[name="searchMode"]:checked')?.value || 'title';
+  
   if (pages.length === 0) {
     nav.classList.remove("show");
     document.getElementById("viewer").innerHTML = `<div class="placeholder"><div class="placeholder-icon">📄</div><div class="placeholder-text">内容がない</div></div>`;
@@ -548,41 +667,37 @@ function renderPage() {
   nav.classList.add("show");
   const p = pages[currentPage];
 
-  // ナビ情報更新
   document.getElementById("page-info").textContent = `${currentPage + 1} / ${pages.length}`;
   document.getElementById("page-title-nav").textContent = currentFileTitle;
 
-  // ボタン状態
   document.getElementById("btn-first").disabled = currentPage === 0;
   document.getElementById("btn-prev").disabled  = currentPage === 0;
   document.getElementById("btn-next").disabled  = currentPage === pages.length - 1;
   document.getElementById("btn-last").disabled  = currentPage === pages.length - 1;
 
-  // HTML構築
   let html = "";
 
-  // 私の発言
   if (p.userText) {
+    const displayText = (mode === 'content' && q) ? highlightText(p.userText, q) : escHtml(p.userText);
     html += `<div class="msg-block">
       <div class="msg-user">
         <div class="msg-user-label">私</div>
-        <div class="msg-text">${escHtml(p.userText)}</div>
+        <div class="msg-text">${displayText}</div>
       </div>
     </div>`;
   }
 
-  // AI返答ターン
   for (const turn of p.turns) {
     const ai = AI_RULES.find(r => r.label === turn.speaker) || { cssClass: "ai-other", label: turn.speaker };
+    const displayText = (mode === 'content' && q) ? highlightText(turn.text, q) : escHtml(turn.text);
     html += `<div class="msg-block">
       <div class="msg-ai">
         <div class="msg-ai-label ${ai.cssClass}">${escHtml(turn.speaker)}</div>
-        <div class="msg-text">${escHtml(turn.text)}</div>
+        <div class="msg-text">${displayText}</div>
       </div>
     </div>`;
   }
 
-  // ターンがない（区切りなし）かつ userText だけの場合は全文表示
   if (!p.userText && p.turns.length === 0) {
     html = `<div class="viewer"><div class="msg-text">${escHtml("")}</div></div>`;
   }
@@ -620,6 +735,7 @@ document.getElementById("zipInput").addEventListener("change", async e => {
   let done = 0, failed = 0;
   showProgress(0, allEntries.length);
   titleCache = null;
+  contentCache.clear();
   await ensureTitleCache();
 
   for (let i = 0; i < allEntries.length; i += BATCH_SIZE) {
@@ -646,9 +762,11 @@ async function clearAll() {
   if (!confirm("全データを削除しますか？")) return;
   try {
     await sbDeleteAll();
-    allFiles = []; filteredFiles = []; titleCache = null;
+    allFiles = []; filteredFiles = []; searchResults = [];
+    titleCache = null; contentCache.clear();
     activeFileId = null; pages = []; currentPage = 0;
     renderFileList();
+    document.getElementById("search-stats").style.display = "none";
     document.getElementById("page-nav").classList.remove("show");
     document.getElementById("viewer").innerHTML = `<div class="placeholder"><div class="placeholder-icon">📂</div><div class="placeholder-text">ZIPを読み込むと<br>会話ログが表示される</div></div>`;
     document.getElementById("topbar-title").textContent = "AI会話ログ";
