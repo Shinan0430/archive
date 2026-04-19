@@ -84,6 +84,10 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 .file-name { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
 .file-item.active .file-name { color: var(--accent2); }
 .file-date { font-size: 10px; color: var(--muted); font-family: 'JetBrains Mono', monospace; margin-bottom: 6px; }
+.file-item-meta { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.file-page-count { font-size: 10px; color: var(--muted); }
+.file-delete-btn { font-size: 10px; color: var(--error); background: none; border: none; cursor: pointer; padding: 2px 6px; border-radius: 4px; opacity: 0.6; }
+.file-delete-btn:active { opacity: 1; background: rgba(248,113,113,0.1); }
 .search-snippets { margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--border); }
 .search-snippet { font-size: 11px; line-height: 1.6; color: var(--muted); padding: 4px 0; }
 .search-snippet .highlight { background: var(--highlight); color: #000; padding: 1px 2px; border-radius: 2px; font-weight: 500; }
@@ -223,6 +227,14 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
           <div class="help-item-label">AIフィルター</div>
           <div class="help-item-desc">タブで ChatGPT / Grok / DeepSeek / Claude / Dola に絞り込める。ファイル名のパターンで自動判定される。</div>
         </div>
+        <div class="help-item">
+          <div class="help-item-label">ページ数表示</div>
+          <div class="help-item-desc">ファイル一覧の各行に会話のページ数が表示される。内容が読み込まれたファイルから順に表示される。</div>
+        </div>
+        <div class="help-item">
+          <div class="help-item-label">個別削除</div>
+          <div class="help-item-desc">各ファイルの右側にある「削除」ボタンで個別に削除できる。確認ダイアログが出る。</div>
+        </div>
       </div>
       <div class="help-section">
         <div class="help-section-title">検索</div>
@@ -248,6 +260,14 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
         <div class="help-item">
           <div class="help-item-label">ページめくり</div>
           <div class="help-item-desc">「私：」で始まる行が1ページの区切りになる。上部のボタンか、画面を左右にスワイプしてめくれる。|← / →| で最初・最後のページに飛べる。</div>
+        </div>
+        <div class="help-item">
+          <div class="help-item-label">ページジャンプ</div>
+          <div class="help-item-desc">ページ番号（「3 / 200」のような表示）をタップすると入力欄が出て、番号を入力して直接そのページに飛べる。</div>
+        </div>
+        <div class="help-item">
+          <div class="help-item-label">キーボード←→キー</div>
+          <div class="help-item-desc">PCで使うとき、キーボードの←→キーでページをめくれる。</div>
         </div>
         <div class="help-item">
           <div class="help-item-label">スワイプ</div>
@@ -427,6 +447,7 @@ async function sbGetOne(id) {
   return rows[0] || null;
 }
 const sbDeleteAll = () => sbFetch(`${TABLE}?id=gt.0`, { method: "DELETE", headers: { "Prefer": "return=minimal" } });
+const sbDeleteOne = (id) => sbFetch(`${TABLE}?id=eq.${id}`, { method: "DELETE", headers: { "Prefer": "return=minimal" } });
 
 let titleCache = null;
 const contentCache = new Map();
@@ -472,6 +493,7 @@ async function preloadAllContents() {
       }
     }
     contentCacheInitialized = true;
+    fillPageCounts();
   })();
   
   return contentLoadingPromise;
@@ -798,8 +820,51 @@ document.querySelectorAll('input[name="searchAndOr"]').forEach(radio => {
   }, { passive: true });
 })();
 
+async function deleteFile(e, id) {
+  e.stopPropagation();
+  if (!confirm("このファイルを削除しますか？")) return;
+  try {
+    await sbDeleteOne(id);
+    contentCache.delete(id);
+    if (titleCache) {
+      for (const [k, v] of Object.entries(titleCache)) {
+        if (v === id) { delete titleCache[k]; break; }
+      }
+    }
+    allFiles = allFiles.filter(f => f.id !== id);
+    filteredFiles = filteredFiles.filter(f => f.id !== id);
+    if (activeFileId === id) {
+      activeFileId = null;
+      pages = [];
+      document.getElementById("page-nav").classList.remove("show");
+      document.getElementById("hit-panel").style.display = "none";
+      document.getElementById("viewer").innerHTML = `<div class="placeholder"><div class="placeholder-icon">📂</div><div class="placeholder-text">ZIPを読み込むと<br>会話ログが表示される</div></div>`;
+      document.getElementById("topbar-title").textContent = "AI会話ログ";
+    }
+    renderFileList();
+    showToast("削除完了", "success");
+  } catch(e) {
+    showToast("削除失敗: " + e.message, "error");
+  }
+}
+
+function countPages(content) {
+  if (!content) return 0;
+  const m = content.match(/^私[：:]/mg);
+  return m ? m.length : 1;
+}
+
+// ページ数を非同期で補完
+async function fillPageCounts() {
+  for (const f of allFiles) {
+    if (f.pageCount != null) continue;
+    const c = contentCache.get(f.id);
+    if (c) { f.pageCount = countPages(c); }
+  }
+  renderFileList();
+}
+
 function renderFileList() {
-  const wrap = document.getElementById("file-list");
   const pageTotal = Math.ceil(filteredFiles.length / LIST_PAGE_SIZE) || 1;
   const start = listPage * LIST_PAGE_SIZE;
   const slice = filteredFiles.slice(start, start + LIST_PAGE_SIZE);
@@ -829,7 +894,11 @@ function renderFileList() {
           <span class="ai-badge ${ai.cssClass}">${ai.label}</span>
           <span class="file-name">${mode === 'title' && q ? highlightText(f.title, q) : escHtml(f.title)}</span>
         </div>
-        <div class="file-date">${date}</div>
+        <div class="file-item-meta">
+          <span class="file-date">${date}</span>
+          <span class="file-page-count">${f.pageCount != null ? f.pageCount + 'p' : ''}</span>
+          <button class="file-delete-btn" onclick="deleteFile(event,${f.id})">削除</button>
+        </div>
         ${snippetsHtml}
       </div>`;
     }).join("");
@@ -1121,6 +1190,10 @@ function doPageJump() {
 document.addEventListener("keydown", e => {
   if (e.key === "Escape") closePageJump();
   if (e.key === "Enter" && !document.getElementById("jump-overlay").classList.contains("hidden")) doPageJump();
+  if (document.getElementById("jump-overlay").classList.contains("hidden")) {
+    if (e.key === "ArrowRight") changePage(1);
+    if (e.key === "ArrowLeft")  changePage(-1);
+  }
 });
 
 function showHelp() {
