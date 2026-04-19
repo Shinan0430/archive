@@ -115,7 +115,14 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 .nav-btn:active { background: var(--border); }
 .nav-btn:disabled { opacity: 0.3; cursor: default; }
 .nav-btn.edge { font-size: 12px; }
-.page-info { font-size: 12px; color: var(--muted); text-align: center; flex: 1; font-family: 'JetBrains Mono', monospace; }
+.page-info { font-size: 12px; color: var(--muted); text-align: center; flex: 1; font-family: 'JetBrains Mono', monospace; cursor: pointer; padding: 4px 8px; border-radius: 6px; }
+.page-info:active { background: var(--surface2); }
+.jump-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 300; display: flex; align-items: center; justify-content: center; }
+.jump-overlay.hidden { display: none; }
+.jump-modal { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 20px 16px; width: min(280px, 88vw); display: flex; flex-direction: column; gap: 12px; }
+.jump-modal-title { font-size: 12px; color: var(--muted); text-align: center; }
+.jump-input { width: 100%; padding: 10px 14px; background: var(--surface2); border: 1px solid var(--accent); border-radius: 8px; color: var(--text); font-size: 20px; font-family: 'JetBrains Mono', monospace; outline: none; text-align: center; }
+.jump-btn { width: 100%; padding: 10px; background: var(--accent); border: none; border-radius: 8px; color: #fff; font-size: 14px; cursor: pointer; }
 .page-title { font-size: 11px; color: var(--muted); text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .viewer-wrap { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
@@ -316,8 +323,8 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
     <button class="nav-btn edge" id="btn-first" onclick="changePage('first')" title="最初のページ">|←</button>
     <button class="nav-btn" id="btn-prev"  onclick="changePage(-1)"     title="前のページ">←</button>
     <div style="flex:1;text-align:center;min-width:0">
-      <div class="page-info"      id="page-info"></div>
-      <div class="page-title"     id="page-title-nav"></div>
+      <div class="page-info" id="page-info" onclick="openPageJump()" title="タップしてページ移動"></div>
+      <div class="page-title" id="page-title-nav"></div>
     </div>
     <button class="nav-btn" id="btn-next"  onclick="changePage(1)"      title="次のページ">→</button>
     <button class="nav-btn edge" id="btn-last"  onclick="changePage('last')"  title="最後のページ">→|</button>
@@ -336,6 +343,14 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
         <div class="placeholder-text">ZIPを読み込むと<br>会話ログが表示される</div>
       </div>
     </div>
+  </div>
+</div>
+
+<div class="jump-overlay hidden" id="jump-overlay" onclick="closePageJump(event)">
+  <div class="jump-modal">
+    <div class="jump-modal-title" id="jump-modal-title">ページを入力</div>
+    <input class="jump-input" id="jump-input" type="number" min="1" inputmode="numeric">
+    <button class="jump-btn" onclick="doPageJump()">移動</button>
   </div>
 </div>
 
@@ -1080,6 +1095,33 @@ async function clearAll() {
 function escHtml(s) {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
+
+function openPageJump() {
+  if (!pages.length) return;
+  const inp = document.getElementById("jump-input");
+  document.getElementById("jump-modal-title").textContent = `ページを入力（1〜${pages.length}）`;
+  inp.value = currentPage + 1;
+  inp.max = pages.length;
+  document.getElementById("jump-overlay").classList.remove("hidden");
+  setTimeout(() => { inp.focus(); inp.select(); }, 50);
+}
+function closePageJump(e) {
+  if (!e || e.target === document.getElementById("jump-overlay")) {
+    document.getElementById("jump-overlay").classList.add("hidden");
+  }
+}
+function doPageJump() {
+  const v = parseInt(document.getElementById("jump-input").value, 10);
+  if (!isNaN(v) && v >= 1 && v <= pages.length) {
+    currentPage = v - 1;
+    renderPage();
+  }
+  document.getElementById("jump-overlay").classList.add("hidden");
+}
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") closePageJump();
+  if (e.key === "Enter" && !document.getElementById("jump-overlay").classList.contains("hidden")) doPageJump();
+});
 
 function showHelp() {
   document.getElementById("help-overlay").classList.remove("hidden");
