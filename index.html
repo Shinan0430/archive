@@ -380,9 +380,7 @@ function aiInfo(key) {
 function extractSortKey(title) {
   const matches = title.match(/(\d+)/g);
   if (!matches) return 0;
-  const lastNum  = parseInt(matches[matches.length - 1], 10);
-  const firstNum = matches.length > 1 ? parseInt(matches[0], 10) : 0;
-  return firstNum * 10000 + lastNum;
+  return parseInt(matches[matches.length - 1], 10);
 }
 
 // Supabase
@@ -402,7 +400,11 @@ async function sbGetAll() {
     if (rows.length < 1000) break;
     offset += 1000;
   }
-  allRows.sort((a, b) => extractSortKey(a.title) - extractSortKey(b.title));
+  allRows.sort((a, b) => {
+    const diff = extractSortKey(a.title) - extractSortKey(b.title);
+    if (diff !== 0) return diff;
+    return a.title.localeCompare(b.title, 'ja');
+  });
   return allRows;
 }
 async function sbGetOne(id) {
