@@ -444,7 +444,7 @@ async function sbGetAll() {
   return allRows;
 }
 async function sbGetOne(id) {
-  const rows = await sbFetch(`${TABLE}?id=eq.${id}&select=title,content,ai_type`) || [];
+  const rows = await sbFetch(`${TABLE}?id=eq.${id}&select=id,title,content,ai_type`) || [];
   return rows[0] || null;
 }
 const sbDeleteAll = () => sbFetch(`${TABLE}?id=gt.0`, { method: "DELETE", headers: { "Prefer": "return=minimal" } });
@@ -615,10 +615,10 @@ function getSnippetAroundMatch(content, query, maxLines = 3) {
 
   const pageMarker = /^私[：:]\s*/;
   const linePageMap = [];
-  let pageNum = 0;
+  let pg = 0;
   for (const l of lines) {
-    if (pageMarker.test(l)) pageNum++;
-    linePageMap.push(pageNum);
+    if (pageMarker.test(l)) pg++;
+    linePageMap.push(Math.max(pg, 1));
   }
 
   for (let i = 0; i < lines.length; i++) {
@@ -968,6 +968,11 @@ let currentFileTitle = "";
 
 async function openFile(id) {
   activeFileId = id;
+  // 実行中の内容検索があれば中断
+  if (searchAbortController) {
+    searchAbortController.abort();
+    searchAbortController = null;
+  }
   renderFileList();
   closeMenu();
   try {
@@ -976,6 +981,8 @@ async function openFile(id) {
       row = await sbGetOne(id);
       if (row) contentCache.set(id, row.content);
     }
+    // 非同期待ち中に別のファイルが選ばれた場合は無視
+    if (activeFileId !== id) return;
     if (!row) { showToast("データなし", "error"); return; }
     
     const fileInfo = allFiles.find(f => f.id === id);
@@ -1090,7 +1097,7 @@ function renderPage() {
     html += `<div class="msg-block"><div class="msg-ai"><div class="msg-ai-label ${ai.cssClass}">${escHtml(turn.speaker)}</div><div class="msg-text">${displayText}</div></div></div>`;
   }
   if (!p.userText && p.turns.length === 0) {
-    html = `<div class="viewer"><div class="msg-text">${escHtml("")}</div></div>`;
+    html = `<div class="msg-text">${escHtml("")}</div>`;
   }
   document.getElementById("viewer").innerHTML = `<div class="viewer">${html}</div>`;
   document.getElementById("viewer-wrap").scrollTop = 0;
@@ -1105,10 +1112,14 @@ function changePage(dir) {
 }
 
 // ZIP読み込み
+let isImporting = false;
 document.getElementById("zipInput").addEventListener("change", async e => {
   const files = Array.from(e.target.files);
   e.target.value = "";
   if (!files.length) return;
+  if (isImporting) { showToast("読み込み中です…", "error"); return; }
+  isImporting = true;
+  document.getElementById("zip-btn").disabled = true;
   
   let allEntries = [];
   for (const file of files) {
@@ -1121,7 +1132,12 @@ document.getElementById("zipInput").addEventListener("change", async e => {
       showToast(`ZIP読み込み失敗: ${file.name}`, "error");
     }
   }
-  if (!allEntries.length) { showToast("対象ファイルなし", "error"); return; }
+  if (!allEntries.length) {
+    showToast("対象ファイルなし", "error");
+    isImporting = false;
+    document.getElementById("zip-btn").disabled = false;
+    return;
+  }
 
   let done = 0, failed = 0;
   showProgress(0, allEntries.length);
@@ -1145,12 +1161,15 @@ document.getElementById("zipInput").addEventListener("change", async e => {
   }
 
   hideProgress();
+  isImporting = false;
+  document.getElementById("zip-btn").disabled = false;
   showToast(failed ? `完了（失敗${failed}件）` : `${done}件保存完了`, failed ? "error" : "success");
   await loadList();
 });
 
 // 全削除
 async function clearAll() {
+  if (allFiles.length === 0) { showToast("削除するファイルがない", "error"); return; }
   if (!confirm("全データを削除しますか？")) return;
   try {
     await sbDeleteAll();
@@ -1195,9 +1214,12 @@ function doPageJump() {
   }
   document.getElementById("jump-overlay").classList.add("hidden");
 }
+// jump-inputのEnterキーを直接ハンドル（スマホでも確実に動作）
+document.getElementById("jump-input").addEventListener("keydown", e => {
+  if (e.key === "Enter") { e.preventDefault(); doPageJump(); }
+});
 document.addEventListener("keydown", e => {
   if (e.key === "Escape") closePageJump();
-  if (e.key === "Enter" && !document.getElementById("jump-overlay").classList.contains("hidden")) doPageJump();
   if (document.getElementById("jump-overlay").classList.contains("hidden")) {
     if (e.key === "ArrowRight") changePage(1);
     if (e.key === "ArrowLeft")  changePage(-1);
