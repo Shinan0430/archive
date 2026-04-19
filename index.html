@@ -90,6 +90,14 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 .search-more { font-size: 10px; color: var(--accent2); margin-top: 4px; cursor: pointer; }
 .snippet-page { font-size: 10px; color: var(--accent2); margin-left: 6px; opacity: 0.8; }
 .search-stats { font-size: 11px; color: var(--muted); padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--surface2); }
+.num-range-box { display: flex; align-items: center; gap: 6px; }
+.num-range-label { font-size: 11px; color: var(--muted); flex-shrink: 0; }
+.num-range-input { width: 64px; padding: 5px 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 12px; outline: none; }
+.num-range-input:focus { border-color: var(--accent); }
+.search-progress-wrap { padding: 6px 12px 2px; display: none; }
+.search-progress-wrap.show { display: block; }
+.search-progress-track { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
+.search-progress-fill { height: 100%; background: var(--accent2); border-radius: 2px; width: 0%; transition: width 0.15s; }
 
 .ai-chatgpt  { background: rgba(16,163,127,0.15); color: var(--chatgpt); }
 .ai-grok     { background: rgba(29,155,240,0.15); color: var(--grok); }
@@ -178,10 +186,20 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 <div class="sidebar-overlay" id="overlay" onclick="closeMenu()"></div>
 <div class="sidebar" id="sidebar">
   <div class="search-box">
-    <input class="search-input" id="search-input" placeholder="🔍 検索...">
+    <input class="search-input" id="search-input" placeholder="🔍 検索（スペース区切りでAND）...">
     <div class="search-mode">
       <label><input type="radio" name="searchMode" value="title" checked> タイトルのみ</label>
       <label><input type="radio" name="searchMode" value="content"> 内容も検索</label>
+    </div>
+    <div class="search-mode">
+      <label><input type="radio" name="searchAndOr" value="and" checked> AND</label>
+      <label><input type="radio" name="searchAndOr" value="or"> OR</label>
+    </div>
+    <div class="num-range-box">
+      <span class="num-range-label">番号</span>
+      <input class="num-range-input" id="num-from" type="number" placeholder="from" min="0">
+      <span class="num-range-label">〜</span>
+      <input class="num-range-input" id="num-to" type="number" placeholder="to" min="0">
     </div>
   </div>
   <div class="filter-tabs">
@@ -193,6 +211,9 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
     <div class="ftab" data-ai="dola"     onclick="setFilter('dola')"><span class="dot" style="background:var(--dola)"></span>Dola</div>
   </div>
   <div id="search-stats" class="search-stats" style="display:none;"></div>
+  <div class="search-progress-wrap" id="search-progress-wrap">
+    <div class="search-progress-track"><div class="search-progress-fill" id="search-progress-fill"></div></div>
+  </div>
   <div class="file-list-wrap" id="file-list-wrap">
     <div id="file-list" style="flex:1"></div>
     <div class="list-pagination" id="list-pagination"></div>
@@ -427,21 +448,37 @@ function escapeRegex(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function getSearchTerms(query) {
+  return query.trim().split(/\s+/).filter(Boolean);
+}
+
+function getSearchMode() {
+  return document.querySelector('input[name="searchAndOr"]:checked')?.value || 'and';
+}
+
+function matchesQuery(text, terms, andOr) {
+  const t = text.toLowerCase();
+  if (andOr === 'and') return terms.every(w => t.includes(w.toLowerCase()));
+  return terms.some(w => t.includes(w.toLowerCase()));
+}
+
 function highlightText(text, query) {
   if (!query) return escHtml(text);
-  const escaped = escapeRegex(query);
-  const regex = new RegExp(`(${escaped})`, 'gi');
-  return escHtml(text).replace(regex, '<span class="highlight">$1</span>');
+  const terms = getSearchTerms(query);
+  let result = escHtml(text);
+  for (const term of terms) {
+    result = result.replace(new RegExp(`(${escapeRegex(term)})`, 'gi'), '<span class="highlight">$1</span>');
+  }
+  return result;
 }
 
 function getSnippetAroundMatch(content, query, maxLines = 3) {
   if (!query || !content) return [];
   const lines = content.split('\n');
-  const queryLower = query.toLowerCase();
+  const terms = getSearchTerms(query);
+  const andOr = getSearchMode();
   const snippets = [];
-  const seen = new Set();
 
-  // 各行が何ページ目かを事前計算
   const pageMarker = /^私[：:]\s*/;
   const linePageMap = [];
   let pageNum = 0;
@@ -449,68 +486,83 @@ function getSnippetAroundMatch(content, query, maxLines = 3) {
     if (pageMarker.test(l)) pageNum++;
     linePageMap.push(pageNum);
   }
-  
+
   for (let i = 0; i < lines.length; i++) {
-    if (lines[i].toLowerCase().includes(queryLower)) {
+    if (matchesQuery(lines[i], terms, andOr)) {
       const start = Math.max(0, i - 1);
       const end = Math.min(lines.length, i + 2);
-      const key = `${start}-${end}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        const snippetLines = lines.slice(start, end);
-        const snippet = snippetLines.join('\n');
-        snippets.push({
-          text: snippet,
-          lineNum: i + 1,
-          page: linePageMap[i],
-          highlighted: highlightText(snippet, query)
-        });
-      }
-      if (snippets.length >= 999) break;
+      const snippetLines = lines.slice(start, end);
+      const snippet = snippetLines.join('\n');
+      snippets.push({
+        text: snippet,
+        lineNum: i + 1,
+        page: linePageMap[i],
+        highlighted: highlightText(snippet, query)
+      });
     }
   }
   return snippets;
 }
 
+function getFileNumber(title) {
+  const m = title.match(/(\d+)/g);
+  if (!m) return null;
+  return parseInt(m[m.length - 1], 10);
+}
+
+function getNumRange() {
+  const from = parseInt(document.getElementById("num-from").value, 10);
+  const to   = parseInt(document.getElementById("num-to").value, 10);
+  return { from: isNaN(from) ? null : from, to: isNaN(to) ? null : to };
+}
+
+function matchesNumRange(title, from, to) {
+  if (from === null && to === null) return true;
+  const n = getFileNumber(title);
+  if (n === null) return false;
+  if (from !== null && n < from) return false;
+  if (to   !== null && n > to)   return false;
+  return true;
+}
+
 async function searchContentFast(query) {
-  if (searchAbortController) {
-    searchAbortController.abort();
-  }
+  if (searchAbortController) searchAbortController.abort();
   searchAbortController = new AbortController();
   const signal = searchAbortController.signal;
-  
-  const queryLower = query.toLowerCase();
+
+  const terms = getSearchTerms(query);
+  const andOr = getSearchMode();
   const results = [];
-  
   const batchSize = 50;
   let processed = 0;
-  
+
+  const spw = document.getElementById("search-progress-wrap");
+  const spf = document.getElementById("search-progress-fill");
+  spw.classList.add("show");
+  spf.style.width = "0%";
+
   for (let i = 0; i < allFiles.length; i += batchSize) {
-    if (signal.aborted) return [];
-    
+    if (signal.aborted) { spw.classList.remove("show"); return []; }
+
     const batch = allFiles.slice(i, i + batchSize);
-    
     for (const file of batch) {
       if (signal.aborted) break;
-      
       const content = contentCache.get(file.id);
       if (!content) continue;
-      
-      if (content.toLowerCase().includes(queryLower)) {
+      if (matchesQuery(content, terms, andOr)) {
         const snippets = getSnippetAroundMatch(content, query);
-        if (snippets.length > 0) {
-          results.push({ ...file, snippets, matchCount: snippets.length });
-        }
+        if (snippets.length > 0) results.push({ ...file, snippets, matchCount: snippets.length });
       }
     }
-    
+
     processed += batch.length;
-    const progress = Math.round((processed / allFiles.length) * 100);
-    document.getElementById("search-stats").textContent = `検索中... ${progress}% (${results.length}件ヒット)`;
-    
+    const pct = Math.round((processed / allFiles.length) * 100);
+    document.getElementById("search-stats").textContent = `検索中... ${pct}% (${results.length}件ヒット)`;
+    spf.style.width = pct + "%";
     await new Promise(r => setTimeout(r, 10));
   }
-  
+
+  spw.classList.remove("show");
   if (signal.aborted) return [];
   return results.sort((a, b) => b.matchCount - a.matchCount);
 }
@@ -540,39 +592,43 @@ async function loadList() {
 async function applyFilter() {
   const q = currentSearch.trim();
   const mode = document.querySelector('input[name="searchMode"]:checked')?.value || 'title';
-  
+  const terms = getSearchTerms(q);
+  const andOr = getSearchMode();
+  const { from, to } = getNumRange();
+
   if (searchAbortController) {
     searchAbortController.abort();
     searchAbortController = null;
   }
-  
+
   let aiFiltered = allFiles.filter(f => {
     const aiMatch = currentFilter === "all" || f.ai_type === currentFilter;
-    const titleMatch = !q || f.title.toLowerCase().includes(q.toLowerCase());
-    return aiMatch && (mode === 'title' ? titleMatch : true);
+    const numMatch = matchesNumRange(f.title, from, to);
+    const titleMatch = !q || matchesQuery(f.title, terms, andOr);
+    return aiMatch && numMatch && (mode === 'title' ? titleMatch : true);
   });
-  
+
   if (mode === 'content' && q) {
     isSearching = true;
     document.getElementById("search-stats").style.display = "block";
     document.getElementById("search-stats").textContent = "コンテンツ読み込み中...";
     renderFileList();
-    
+
     await preloadAllContents();
-    
+
     searchResults = await searchContentFast(q);
-    
+
     if (!searchAbortController?.signal.aborted) {
       const filteredResults = searchResults.filter(f => {
         const aiMatch = currentFilter === "all" || f.ai_type === currentFilter;
-        return aiMatch;
+        const numMatch = matchesNumRange(f.title, from, to);
+        return aiMatch && numMatch;
       });
-      
       filteredFiles = filteredResults;
-      document.getElementById("search-stats").textContent = 
+      document.getElementById("search-stats").textContent =
         `${filteredFiles.length}件のファイルに一致 (${searchResults.length}件ヒット)`;
     }
-    
+
     isSearching = false;
     searchAbortController = null;
   } else {
@@ -580,7 +636,7 @@ async function applyFilter() {
     searchResults = [];
     document.getElementById("search-stats").style.display = "none";
   }
-  
+
   listPage = 0;
   renderFileList();
 }
@@ -600,6 +656,35 @@ document.getElementById("search-input").addEventListener("input", e => {
 document.querySelectorAll('input[name="searchMode"]').forEach(radio => {
   radio.addEventListener("change", () => applyFilter());
 });
+
+document.querySelectorAll('input[name="searchAndOr"]').forEach(radio => {
+  radio.addEventListener("change", () => applyFilter());
+});
+
+["num-from", "num-to"].forEach(id => {
+  document.getElementById(id).addEventListener("input", () => {
+    clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = setTimeout(() => applyFilter(), 400);
+  });
+});
+
+// スワイプでページめくり
+(function() {
+  let touchStartX = 0, touchStartY = 0;
+  const vw = document.getElementById("viewer-wrap");
+  vw.addEventListener("touchstart", e => {
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+  }, { passive: true });
+  vw.addEventListener("touchend", e => {
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    const dy = e.changedTouches[0].clientY - touchStartY;
+    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+      if (dx < 0) changePage(1);
+      else changePage(-1);
+    }
+  }, { passive: true });
+})();
 
 function renderFileList() {
   const wrap = document.getElementById("file-list");
