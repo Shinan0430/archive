@@ -72,11 +72,11 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 
 .file-list-wrap { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; display: flex; flex-direction: column; }
 .sidebar-empty { padding: 24px 16px; color: var(--muted); font-size: 13px; text-align: center; line-height: 1.8; }
-.list-pagination { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px; border-top: 1px solid var(--border); flex-shrink: 0; }
-.list-page-btn { width: 32px; height: 32px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.list-pagination { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 10px; border-top: 1px solid var(--border); flex-shrink: 0; }
+.list-page-btn { width: 44px; height: 44px; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
 .list-page-btn:active { background: var(--border); }
 .list-page-btn:disabled { opacity: 0.3; cursor: default; }
-.list-page-info { font-size: 11px; color: var(--muted); font-family: 'JetBrains Mono', monospace; min-width: 60px; text-align: center; }
+.list-page-info { font-size: 12px; color: var(--muted); font-family: 'JetBrains Mono', monospace; min-width: 60px; text-align: center; }
 
 .file-item { padding: 10px 12px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background 0.15s; }
 .file-item:active, .file-item.active { background: var(--surface2); }
@@ -187,7 +187,7 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
   <div class="pw-logo">AI LOG VIEWER</div>
   <div class="pw-title">パスワードを入力</div>
   <div class="pw-box">
-    <input type="password" class="pw-input" id="pw-input" placeholder="password" autocomplete="off">
+    <input type="password" class="pw-input" id="pw-input" placeholder="パスワード" autocomplete="off">
     <div class="pw-err" id="pw-err"></div>
     <button class="pw-btn" onclick="checkPassword()">ロック解除</button>
   </div>
@@ -234,7 +234,7 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
         </div>
         <div class="help-item">
           <div class="help-item-label">個別削除</div>
-          <div class="help-item-desc">各ファイルの右側にある「削除」ボタンで個別に削除できる。確認ダイアログが出る。</div>
+          <div class="help-item-desc">各ファイルの右側にある「削除」ボタンで個別に削除できる。確認ダイアログが出る。削除したら元に戻せない。</div>
         </div>
       </div>
       <div class="help-section">
@@ -276,10 +276,10 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
         </div>
       </div>
       <div class="help-section">
-        <div class="help-section-title">ヒットパネル</div>
+        <div class="help-section-title">ヒット一覧</div>
         <div class="help-item">
-          <div class="help-item-label">ヒット一覧</div>
-          <div class="help-item-desc">内容検索でヒットしたファイルを開くと、ページナビの下にヒット一覧が表示される。各行にページ番号（p.3 など）とヒットした箇所のテキストが出る。タップするとそのページに飛べる。</div>
+          <div class="help-item-label">ヒット一覧の表示</div>
+          <div class="help-item-desc">内容検索でヒットしたファイルを開くと、ページナビの下に「ヒット ○件」という一覧が表示される。各行にページ番号（p.3 など）とヒットした箇所のテキストが出る。タップするとそのページに飛べる。</div>
         </div>
         <div class="help-item">
           <div class="help-item-label">折りたたみ</div>
@@ -290,7 +290,7 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
         <div class="help-section-title">その他</div>
         <div class="help-item">
           <div class="help-item-label">全削除</div>
-          <div class="help-item-desc">保存されている全データを削除する。確認ダイアログが出る。</div>
+          <div class="help-item-desc">保存されている全ファイルを削除する。ファイルが0件のときは押せない。削除したら元に戻せない。</div>
         </div>
       </div>
     </div>
@@ -828,7 +828,7 @@ document.querySelectorAll('input[name="searchAndOr"]').forEach(radio => {
 
 async function deleteFile(e, id) {
   e.stopPropagation();
-  if (!confirm("このファイルを削除しますか？")) return;
+  if (!confirm("このファイルを削除しますか？\n※元に戻せません")) return;
   try {
     await sbDeleteOne(id);
     contentCache.delete(id);
@@ -1170,7 +1170,7 @@ document.getElementById("zipInput").addEventListener("change", async e => {
 // 全削除
 async function clearAll() {
   if (allFiles.length === 0) { showToast("削除するファイルがない", "error"); return; }
-  if (!confirm("全データを削除しますか？")) return;
+  if (!confirm("全ファイルを削除しますか？\n※元に戻せません")) return;
   try {
     await sbDeleteAll();
     allFiles = []; filteredFiles = []; searchResults = [];
