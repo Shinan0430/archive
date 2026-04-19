@@ -88,6 +88,7 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 .search-snippet { font-size: 11px; line-height: 1.6; color: var(--muted); padding: 4px 0; }
 .search-snippet .highlight { background: var(--highlight); color: #000; padding: 1px 2px; border-radius: 2px; font-weight: 500; }
 .search-more { font-size: 10px; color: var(--accent2); margin-top: 4px; cursor: pointer; }
+.snippet-page { font-size: 10px; color: var(--accent2); margin-left: 6px; opacity: 0.8; }
 .search-stats { font-size: 11px; color: var(--muted); padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--surface2); }
 
 .ai-chatgpt  { background: rgba(16,163,127,0.15); color: var(--chatgpt); }
@@ -419,6 +420,15 @@ function getSnippetAroundMatch(content, query, maxLines = 3) {
   const queryLower = query.toLowerCase();
   const snippets = [];
   const seen = new Set();
+
+  // 各行が何ページ目かを事前計算
+  const pageMarker = /^私[：:]\s*/;
+  const linePageMap = [];
+  let pageNum = 0;
+  for (const l of lines) {
+    if (pageMarker.test(l)) pageNum++;
+    linePageMap.push(pageNum);
+  }
   
   for (let i = 0; i < lines.length; i++) {
     if (lines[i].toLowerCase().includes(queryLower)) {
@@ -432,6 +442,7 @@ function getSnippetAroundMatch(content, query, maxLines = 3) {
         snippets.push({
           text: snippet,
           lineNum: i + 1,
+          page: linePageMap[i],
           highlighted: highlightText(snippet, query)
         });
       }
@@ -591,7 +602,7 @@ function renderFileList() {
       if (mode === 'content' && q && f.snippets && f.snippets.length > 0) {
         const displaySnippets = f.snippets.slice(0, 3);
         snippetsHtml = `<div class="search-snippets">` +
-          displaySnippets.map(s => `<div class="search-snippet">...${s.highlighted}...</div>`).join('') +
+          displaySnippets.map(s => `<div class="search-snippet">...${s.highlighted}...<span class="snippet-page">p.${s.page}</span></div>`).join('') +
           (f.snippets.length > 3 ? `<div class="search-more">他 ${f.snippets.length - 3} 件の一致</div>` : '') +
           `</div>`;
       }
