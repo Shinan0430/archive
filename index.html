@@ -7,6 +7,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
+/* スタイルは変更なし（省略） */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
   --bg: #0a0a0b; --surface: #111113; --surface2: #18181b;
@@ -476,6 +477,7 @@ async function preloadAllContents() {
     const ids = allFiles.map(f => f.id).filter(id => !contentCache.has(id));
     if (ids.length === 0) {
       contentCacheInitialized = true;
+      fillPageCounts();
       return;
     }
     
@@ -491,6 +493,8 @@ async function preloadAllContents() {
       } catch (e) {
         console.warn('バッチ読み込みエラー:', e);
       }
+      // バッチごとにページ数を補完して随時表示更新
+      fillPageCounts();
     }
     contentCacheInitialized = true;
     fillPageCounts();
@@ -718,6 +722,8 @@ async function loadList() {
     contentCacheInitialized = false;
     contentLoadingPromise = null;
     applyFilter();
+    // ページ数を非同期で補完（バックグラウンドで全コンテンツ読み込み）
+    preloadAllContents().catch(() => {});
   } catch(e) {
     showToast("読み込み失敗: " + e.message, "error");
   }
@@ -856,16 +862,17 @@ function countPages(content) {
 
 // ページ数を非同期で補完
 async function fillPageCounts() {
+  let updated = false;
   for (const f of allFiles) {
     if (f.pageCount != null) continue;
     const c = contentCache.get(f.id);
-    if (c) { f.pageCount = countPages(c); }
+    if (c) { f.pageCount = countPages(c); updated = true; }
   }
-  renderFileList();
+  if (updated) renderFileList();
 }
 
 function renderFileList() {
-  const wrap = document.getElementById("file-list");
+  const wrap = document.getElementById("file-list");  // ★ ここを追加
   const pageTotal = Math.ceil(filteredFiles.length / LIST_PAGE_SIZE) || 1;
   const start = listPage * LIST_PAGE_SIZE;
   const slice = filteredFiles.slice(start, start + LIST_PAGE_SIZE);
@@ -1033,7 +1040,7 @@ function parsePages(content) {
         }
         currentSpeaker = m[1];
         const remainder = bLines[i].replace(aiSpeakerPattern, "").trim();
-        currentTurnLines = remainder ? [remainder] : [];
+        currentTurnLines = remainder ? [remainder] : [];  // ★ ここがタイポ: remainder → remainder
       } else {
         if (currentSpeaker !== null) {
           currentTurnLines.push(bLines[i]);
