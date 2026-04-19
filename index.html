@@ -133,6 +133,19 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+.hit-panel { flex-shrink: 0; background: var(--surface); border-bottom: 1px solid var(--border); max-height: 240px; display: flex; flex-direction: column; }
+.hit-panel-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; cursor: pointer; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.hit-panel-title { font-size: 11px; color: var(--accent2); font-family: 'JetBrains Mono', monospace; letter-spacing: 1px; }
+.hit-panel-toggle { font-size: 10px; color: var(--muted); }
+.hit-panel-list { overflow-y: auto; flex: 1; }
+.hit-panel.collapsed .hit-panel-list { display: none; }
+.hit-panel.collapsed { max-height: none; }
+.hit-item { padding: 8px 12px; border-bottom: 1px solid var(--border); cursor: pointer; display: flex; gap: 8px; align-items: flex-start; transition: background 0.15s; }
+.hit-item:active { background: var(--surface2); }
+.hit-item-page { font-size: 10px; font-family: 'JetBrains Mono', monospace; color: var(--accent2); flex-shrink: 0; padding-top: 2px; min-width: 32px; }
+.hit-item-text { font-size: 11px; color: var(--muted); line-height: 1.6; word-break: break-word; flex: 1; }
+.hit-item-text .highlight { background: var(--highlight); color: #000; padding: 1px 2px; border-radius: 2px; font-weight: 500; }
 </style>
 </head>
 <body>
@@ -196,6 +209,13 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
     </div>
     <button class="nav-btn" id="btn-next"  onclick="changePage(1)"      title="次のページ">→</button>
     <button class="nav-btn edge" id="btn-last"  onclick="changePage('last')"  title="最後のページ">→|</button>
+  </div>
+  <div class="hit-panel" id="hit-panel" style="display:none;">
+    <div class="hit-panel-header" onclick="toggleHitPanel()">
+      <span class="hit-panel-title" id="hit-panel-title">ヒット一覧</span>
+      <span class="hit-panel-toggle" id="hit-panel-toggle">▲</span>
+    </div>
+    <div class="hit-panel-list" id="hit-panel-list"></div>
   </div>
   <div class="viewer-wrap" id="viewer-wrap">
     <div id="viewer">
@@ -632,6 +652,41 @@ function listPageMove(d) {
   renderFileList();
 }
 
+// ヒットパネル
+let hitPanelOpen = true;
+function toggleHitPanel() {
+  hitPanelOpen = !hitPanelOpen;
+  const panel = document.getElementById("hit-panel");
+  panel.classList.toggle("collapsed", !hitPanelOpen);
+  document.getElementById("hit-panel-toggle").textContent = hitPanelOpen ? "▲" : "▼";
+}
+
+function renderHitPanel(snippets) {
+  const panel = document.getElementById("hit-panel");
+  const list  = document.getElementById("hit-panel-list");
+  if (!snippets || snippets.length === 0) {
+    panel.style.display = "none";
+    return;
+  }
+  panel.style.display = "flex";
+  hitPanelOpen = true;
+  panel.classList.remove("collapsed");
+  document.getElementById("hit-panel-toggle").textContent = "▲";
+  document.getElementById("hit-panel-title").textContent = `ヒット ${snippets.length}件`;
+  list.innerHTML = snippets.map((s, i) =>
+    `<div class="hit-item" onclick="jumpToHit(${s.page})">
+      <div class="hit-item-page">p.${s.page}</div>
+      <div class="hit-item-text">${s.highlighted}</div>
+    </div>`
+  ).join("");
+}
+
+function jumpToHit(page) {
+  if (!pages.length) return;
+  currentPage = Math.max(0, Math.min(pages.length - 1, page - 1));
+  renderPage();
+}
+
 // ファイルを開く
 let pages = [];
 let currentPage = 0;
@@ -649,13 +704,24 @@ async function openFile(id) {
     }
     if (!row) { showToast("データなし", "error"); return; }
     
-    // タイトルはallFilesから取得
     const fileInfo = allFiles.find(f => f.id === id);
     currentFileTitle = fileInfo?.title || row.title || "";
     document.getElementById("topbar-title").textContent = currentFileTitle;
     
     pages = parsePages(row.content);
     currentPage = 0;
+
+    // 検索中なら該当ファイルのスニペットをヒットパネルに表示
+    const q = currentSearch.trim();
+    const mode = document.querySelector('input[name="searchMode"]:checked')?.value || 'title';
+    if (mode === 'content' && q) {
+      const content = contentCache.get(id) || row.content;
+      const snippets = getSnippetAroundMatch(content, q);
+      renderHitPanel(snippets);
+    } else {
+      document.getElementById("hit-panel").style.display = "none";
+    }
+
     renderPage();
   } catch(e) {
     showToast("読み込み失敗: " + e.message, "error");
