@@ -657,7 +657,11 @@ async function searchContentFast(query) {
 
   spw.classList.remove("show");
   if (signal.aborted) return [];
-  return results.sort((a, b) => b.matchCount - a.matchCount);
+  return results.sort((a, b) => {
+    const diff = extractSortKey(a.title) - extractSortKey(b.title);
+    if (diff !== 0) return diff;
+    return a.title.localeCompare(b.title, 'ja');
+  });
 }
 
 // ファイルリスト
