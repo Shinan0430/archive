@@ -218,7 +218,6 @@ const RETRY_MAX    = 3;
 const RETRY_DELAY  = 600;
 const LIST_PAGE_SIZE = 100;
 
-// AI 判定ルール
 const AI_RULES = [
   { key: "chatgpt",  patterns: [/^CG-/i, /chatgpt/i],                              label: "ChatGPT",  cssClass: "ai-chatgpt" },
   { key: "grok",     patterns: [/^(?:X\d+-)?Grok[-_ ]/i, /^Grok[-_ ]/i, /Grok/i], label: "Grok",     cssClass: "ai-grok" },
@@ -253,7 +252,7 @@ function extractSortKey(title) {
   return firstNum * 10000 + lastNum;
 }
 
-// ── Supabase ──────────────────────────────────────────
+// Supabase
 const SB_H = { "Content-Type": "application/json", "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` };
 async function sbFetch(path, opts = {}) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { ...opts, headers: { ...SB_H, ...(opts.headers || {}) } });
@@ -278,8 +277,12 @@ async function sbGetOne(id) {
   return rows[0] || null;
 }
 const sbDeleteAll = () => sbFetch(`${TABLE}?id=gt.0`, { method: "DELETE", headers: { "Prefer": "return=minimal" } });
+
 let titleCache = null;
-let contentCache = new Map(); // id -> content
+const contentCache = new Map();
+let contentCacheInitialized = false;
+let contentLoadingPromise = null;
+let searchAbortController = null;
 
 async function ensureTitleCache() {
   if (titleCache !== null) return;
@@ -294,17 +297,38 @@ async function ensureTitleCache() {
   for (const r of all) titleCache[r.title] = r.id;
 }
 
-async function getContent(id) {
-  if (contentCache.has(id)) return contentCache.get(id);
-  const row = await sbGetOne(id);
-  if (row) {
-    contentCache.set(id, row.content);
-    return row.content;
-  }
-  return null;
+async function preloadAllContents() {
+  if (contentCacheInitialized) return;
+  if (contentLoadingPromise) return contentLoadingPromise;
+  
+  contentLoadingPromise = (async () => {
+    const ids = allFiles.map(f => f.id).filter(id => !contentCache.has(id));
+    if (ids.length === 0) {
+      contentCacheInitialized = true;
+      return;
+    }
+    
+    const batchSize = 100;
+    for (let i = 0; i < ids.length; i += batchSize) {
+      const batch = ids.slice(i, i + batchSize);
+      const idsStr = batch.join(',');
+      try {
+        const rows = await sbFetch(`${TABLE}?id=in.(${idsStr})&select=id,content`) || [];
+        for (const row of rows) {
+          contentCache.set(row.id, row.content);
+        }
+      } catch (e) {
+        console.warn('バッチ読み込みエラー:', e);
+      }
+    }
+    contentCacheInitialized = true;
+  })();
+  
+  return contentLoadingPromise;
 }
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
 async function sbUpsertSafe(title, content, ai_type) {
   for (let attempt = 0; attempt <= RETRY_MAX; attempt++) {
     try {
@@ -329,7 +353,7 @@ async function sbUpsertSafe(title, content, ai_type) {
   return false;
 }
 
-// ── パスワード ─────────────────────────────────────────
+// パスワード
 document.getElementById("pw-input").addEventListener("keydown", e => { if (e.key === "Enter") checkPassword(); });
 function checkPassword() {
   const inp = document.getElementById("pw-input");
@@ -346,7 +370,7 @@ function checkPassword() {
   }
 }
 
-// ── UI 状態 ────────────────────────────────────────────
+// UI状態
 let menuOpen = false;
 function toggleMenu() {
   menuOpen = !menuOpen;
@@ -358,6 +382,7 @@ function closeMenu() {
   menuOpen = false;
   ["sidebar","overlay","menu-btn"].forEach(id => document.getElementById(id).classList.remove("open"));
 }
+
 let toastTimer;
 function showToast(msg, type = "") {
   const t = document.getElementById("toast");
@@ -376,7 +401,7 @@ function hideProgress() {
   document.getElementById("main").classList.remove("with-progress");
 }
 
-// ── 検索機能 ──────────────────────────────────────────
+// 検索機能
 function escapeRegex(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -410,46 +435,71 @@ function getSnippetAroundMatch(content, query, maxLines = 3) {
           highlighted: highlightText(snippet, query)
         });
       }
+      if (snippets.length >= 5) break;
     }
   }
-  return snippets.slice(0, 5);
+  return snippets;
 }
 
-async function searchContent(query) {
-  const results = [];
-  const queryLower = query.toLowerCase();
+async function searchContentFast(query) {
+  if (searchAbortController) {
+    searchAbortController.abort();
+  }
+  searchAbortController = new AbortController();
+  const signal = searchAbortController.signal;
   
-  for (const file of allFiles) {
-    const content = await getContent(file.id);
-    if (!content) continue;
+  const queryLower = query.toLowerCase();
+  const results = [];
+  
+  const batchSize = 50;
+  let processed = 0;
+  
+  for (let i = 0; i < allFiles.length; i += batchSize) {
+    if (signal.aborted) return [];
     
-    const snippets = getSnippetAroundMatch(content, query);
-    if (snippets.length > 0) {
-      results.push({
-        ...file,
-        snippets,
-        matchCount: snippets.length
-      });
+    const batch = allFiles.slice(i, i + batchSize);
+    
+    for (const file of batch) {
+      if (signal.aborted) break;
+      
+      const content = contentCache.get(file.id);
+      if (!content) continue;
+      
+      if (content.toLowerCase().includes(queryLower)) {
+        const snippets = getSnippetAroundMatch(content, query);
+        if (snippets.length > 0) {
+          results.push({ ...file, snippets, matchCount: snippets.length });
+        }
+      }
     }
+    
+    processed += batch.length;
+    const progress = Math.round((processed / allFiles.length) * 100);
+    document.getElementById("search-stats").textContent = `検索中... ${progress}% (${results.length}件ヒット)`;
+    
+    await new Promise(r => setTimeout(r, 10));
   }
   
+  if (signal.aborted) return [];
   return results.sort((a, b) => b.matchCount - a.matchCount);
 }
 
-// ── サイドバー ファイルリスト ──────────────────────────
-let allFiles      = [];
+// ファイルリスト
+let allFiles = [];
 let filteredFiles = [];
 let searchResults = [];
-let listPage      = 0;
+let listPage = 0;
 let currentFilter = "all";
 let currentSearch = "";
-let searchMode    = "title";
-let activeFileId  = null;
-let isSearching   = false;
+let activeFileId = null;
+let isSearching = false;
+let searchDebounceTimer = null;
 
 async function loadList() {
   try {
     allFiles = await sbGetAll();
+    contentCacheInitialized = false;
+    contentLoadingPromise = null;
     applyFilter();
   } catch(e) {
     showToast("読み込み失敗: " + e.message, "error");
@@ -460,6 +510,11 @@ async function applyFilter() {
   const q = currentSearch.trim();
   const mode = document.querySelector('input[name="searchMode"]:checked')?.value || 'title';
   
+  if (searchAbortController) {
+    searchAbortController.abort();
+    searchAbortController = null;
+  }
+  
   let aiFiltered = allFiles.filter(f => {
     const aiMatch = currentFilter === "all" || f.ai_type === currentFilter;
     const titleMatch = !q || f.title.toLowerCase().includes(q.toLowerCase());
@@ -469,20 +524,26 @@ async function applyFilter() {
   if (mode === 'content' && q) {
     isSearching = true;
     document.getElementById("search-stats").style.display = "block";
-    document.getElementById("search-stats").textContent = "検索中...";
+    document.getElementById("search-stats").textContent = "コンテンツ読み込み中...";
     renderFileList();
     
-    searchResults = await searchContent(q);
+    await preloadAllContents();
     
-    // タイトルフィルタとAIフィルタを適用
-    const filteredResults = searchResults.filter(f => {
-      const aiMatch = currentFilter === "all" || f.ai_type === currentFilter;
-      return aiMatch;
-    });
+    searchResults = await searchContentFast(q);
     
-    filteredFiles = filteredResults;
-    document.getElementById("search-stats").textContent = `${filteredFiles.length}件のファイルに一致`;
+    if (!searchAbortController?.signal.aborted) {
+      const filteredResults = searchResults.filter(f => {
+        const aiMatch = currentFilter === "all" || f.ai_type === currentFilter;
+        return aiMatch;
+      });
+      
+      filteredFiles = filteredResults;
+      document.getElementById("search-stats").textContent = 
+        `${filteredFiles.length}件のファイルに一致 (${searchResults.length}件ヒット)`;
+    }
+    
     isSearching = false;
+    searchAbortController = null;
   } else {
     filteredFiles = aiFiltered;
     searchResults = [];
@@ -501,14 +562,12 @@ function setFilter(key) {
 
 document.getElementById("search-input").addEventListener("input", e => {
   currentSearch = e.target.value;
-  applyFilter();
+  clearTimeout(searchDebounceTimer);
+  searchDebounceTimer = setTimeout(() => applyFilter(), 300);
 });
 
 document.querySelectorAll('input[name="searchMode"]').forEach(radio => {
-  radio.addEventListener("change", () => {
-    searchMode = radio.value;
-    applyFilter();
-  });
+  radio.addEventListener("change", () => applyFilter());
 });
 
 function renderFileList() {
@@ -520,7 +579,7 @@ function renderFileList() {
   const mode = document.querySelector('input[name="searchMode"]:checked')?.value || 'title';
 
   if (isSearching) {
-    wrap.innerHTML = `<div class="sidebar-empty">検索中...</div>`;
+    wrap.innerHTML = `<div class="sidebar-empty">読み込み中...</div>`;
   } else if (filteredFiles.length === 0) {
     wrap.innerHTML = `<div class="sidebar-empty">${q ? '一致するファイルなし' : 'ファイルがない'}</div>`;
   } else {
@@ -532,9 +591,7 @@ function renderFileList() {
       if (mode === 'content' && q && f.snippets && f.snippets.length > 0) {
         const displaySnippets = f.snippets.slice(0, 3);
         snippetsHtml = `<div class="search-snippets">` +
-          displaySnippets.map(s => 
-            `<div class="search-snippet">...${s.highlighted}...</div>`
-          ).join('') +
+          displaySnippets.map(s => `<div class="search-snippet">...${s.highlighted}...</div>`).join('') +
           (f.snippets.length > 3 ? `<div class="search-more">他 ${f.snippets.length - 3} 件の一致</div>` : '') +
           `</div>`;
       }
@@ -564,21 +621,28 @@ function listPageMove(d) {
   renderFileList();
 }
 
-// ── ファイルを開く & ページ解析 ───────────────────────
-let pages       = [];
+// ファイルを開く
+let pages = [];
 let currentPage = 0;
 let currentFileTitle = "";
-let currentSearchQuery = "";
 
 async function openFile(id) {
   activeFileId = id;
   renderFileList();
   closeMenu();
   try {
-    const row = await sbGetOne(id);
+    let row = contentCache.has(id) ? { id, content: contentCache.get(id) } : null;
+    if (!row) {
+      row = await sbGetOne(id);
+      if (row) contentCache.set(id, row.content);
+    }
     if (!row) { showToast("データなし", "error"); return; }
-    currentFileTitle = row.title;
-    document.getElementById("topbar-title").textContent = row.title;
+    
+    // タイトルはallFilesから取得
+    const fileInfo = allFiles.find(f => f.id === id);
+    currentFileTitle = fileInfo?.title || row.title || "";
+    document.getElementById("topbar-title").textContent = currentFileTitle;
+    
     pages = parsePages(row.content);
     currentPage = 0;
     renderPage();
@@ -589,7 +653,6 @@ async function openFile(id) {
 
 function parsePages(content) {
   if (!content) return [];
-
   const lines = content.split("\n");
   const watashiPattern = /^私[：:]\s*/;
   const aiSpeakerPattern = new RegExp(`^(${AI_SPEAKER_LABELS.join("|")})[：:]\\s*`);
@@ -605,15 +668,11 @@ function parsePages(content) {
     }
   }
   if (cur !== null) blocks.push(cur);
-
-  if (blocks.length === 0) {
-    return [{ userText: content, turns: [] }];
-  }
+  if (blocks.length === 0) return [{ userText: content, turns: [] }];
 
   return blocks.map(block => {
     const bLines = block.lines;
     const firstLine = bLines[0].replace(watashiPattern, "");
-
     const turns = [];
     let userParts = firstLine ? [firstLine] : [];
     let currentSpeaker = null;
@@ -644,15 +703,10 @@ function parsePages(content) {
     } else if (currentTurnLines.length > 0) {
       userParts = userParts.concat(currentTurnLines);
     }
-
-    return {
-      userText: userParts.join("\n").trim(),
-      turns
-    };
+    return { userText: userParts.join("\n").trim(), turns };
   });
 }
 
-// ── ページ描画（ハイライト付き） ────────────────────────
 function renderPage() {
   const nav = document.getElementById("page-nav");
   const q = currentSearch.trim();
@@ -669,39 +723,24 @@ function renderPage() {
 
   document.getElementById("page-info").textContent = `${currentPage + 1} / ${pages.length}`;
   document.getElementById("page-title-nav").textContent = currentFileTitle;
-
   document.getElementById("btn-first").disabled = currentPage === 0;
   document.getElementById("btn-prev").disabled  = currentPage === 0;
   document.getElementById("btn-next").disabled  = currentPage === pages.length - 1;
   document.getElementById("btn-last").disabled  = currentPage === pages.length - 1;
 
   let html = "";
-
   if (p.userText) {
     const displayText = (mode === 'content' && q) ? highlightText(p.userText, q) : escHtml(p.userText);
-    html += `<div class="msg-block">
-      <div class="msg-user">
-        <div class="msg-user-label">私</div>
-        <div class="msg-text">${displayText}</div>
-      </div>
-    </div>`;
+    html += `<div class="msg-block"><div class="msg-user"><div class="msg-user-label">私</div><div class="msg-text">${displayText}</div></div></div>`;
   }
-
   for (const turn of p.turns) {
     const ai = AI_RULES.find(r => r.label === turn.speaker) || { cssClass: "ai-other", label: turn.speaker };
     const displayText = (mode === 'content' && q) ? highlightText(turn.text, q) : escHtml(turn.text);
-    html += `<div class="msg-block">
-      <div class="msg-ai">
-        <div class="msg-ai-label ${ai.cssClass}">${escHtml(turn.speaker)}</div>
-        <div class="msg-text">${displayText}</div>
-      </div>
-    </div>`;
+    html += `<div class="msg-block"><div class="msg-ai"><div class="msg-ai-label ${ai.cssClass}">${escHtml(turn.speaker)}</div><div class="msg-text">${displayText}</div></div></div>`;
   }
-
   if (!p.userText && p.turns.length === 0) {
     html = `<div class="viewer"><div class="msg-text">${escHtml("")}</div></div>`;
   }
-
   document.getElementById("viewer").innerHTML = `<div class="viewer">${html}</div>`;
   document.getElementById("viewer-wrap").scrollTop = 0;
 }
@@ -714,11 +753,12 @@ function changePage(dir) {
   renderPage();
 }
 
-// ── ZIP読み込み ────────────────────────────────────────
+// ZIP読み込み
 document.getElementById("zipInput").addEventListener("change", async e => {
   const files = Array.from(e.target.files);
   e.target.value = "";
   if (!files.length) return;
+  
   let allEntries = [];
   for (const file of files) {
     try {
@@ -736,6 +776,7 @@ document.getElementById("zipInput").addEventListener("change", async e => {
   showProgress(0, allEntries.length);
   titleCache = null;
   contentCache.clear();
+  contentCacheInitialized = false;
   await ensureTitleCache();
 
   for (let i = 0; i < allEntries.length; i += BATCH_SIZE) {
@@ -757,13 +798,14 @@ document.getElementById("zipInput").addEventListener("change", async e => {
   await loadList();
 });
 
-// ── 全削除 ────────────────────────────────────────────
+// 全削除
 async function clearAll() {
   if (!confirm("全データを削除しますか？")) return;
   try {
     await sbDeleteAll();
     allFiles = []; filteredFiles = []; searchResults = [];
     titleCache = null; contentCache.clear();
+    contentCacheInitialized = false;
     activeFileId = null; pages = []; currentPage = 0;
     renderFileList();
     document.getElementById("search-stats").style.display = "none";
@@ -776,13 +818,8 @@ async function clearAll() {
   }
 }
 
-// ── ユーティリティ ────────────────────────────────────
 function escHtml(s) {
-  return String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 </script>
 </body>
