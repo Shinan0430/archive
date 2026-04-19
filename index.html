@@ -466,7 +466,7 @@ function getSnippetAroundMatch(content, query, maxLines = 3) {
           highlighted: highlightText(snippet, query)
         });
       }
-      if (snippets.length >= 5) break;
+      if (snippets.length >= 999) break;
     }
   }
   return snippets;
