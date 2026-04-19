@@ -154,6 +154,19 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 .hit-item-page { font-size: 10px; font-family: 'JetBrains Mono', monospace; color: var(--accent2); flex-shrink: 0; padding-top: 2px; min-width: 32px; }
 .hit-item-text { font-size: 11px; color: var(--muted); line-height: 1.6; word-break: break-word; flex: 1; }
 .hit-item-text .highlight { background: var(--highlight); color: #000; padding: 1px 2px; border-radius: 2px; font-weight: 500; }
+
+.help-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 200; display: flex; align-items: flex-start; justify-content: center; padding: 60px 16px 24px; }
+.help-overlay.hidden { display: none; }
+.help-modal { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; width: min(480px, 100%); max-height: 80vh; display: flex; flex-direction: column; overflow: hidden; }
+.help-modal-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.help-modal-title { font-size: 13px; font-weight: 500; }
+.help-close-btn { width: 28px; height: 28px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.help-body { overflow-y: auto; padding: 16px; font-size: 13px; line-height: 1.85; color: var(--text); }
+.help-section { margin-bottom: 20px; }
+.help-section-title { font-size: 11px; color: var(--accent2); letter-spacing: 1px; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid var(--border); }
+.help-item { margin-bottom: 10px; }
+.help-item-label { font-size: 12px; color: var(--text); margin-bottom: 3px; }
+.help-item-desc { font-size: 12px; color: var(--muted); line-height: 1.7; }
 </style>
 </head>
 <body>
@@ -174,7 +187,85 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
   <div class="topbar-actions">
     <input type="file" id="zipInput" accept=".zip" multiple hidden>
     <button class="btn primary" id="zip-btn" onclick="document.getElementById('zipInput').click()">ZIP</button>
+    <button class="btn" onclick="showHelp()">？</button>
     <button class="btn" onclick="clearAll()">全削除</button>
+  </div>
+</div>
+
+<div class="help-overlay hidden" id="help-overlay" onclick="hideHelp(event)">
+  <div class="help-modal">
+    <div class="help-modal-header">
+      <span class="help-modal-title">使い方</span>
+      <button class="help-close-btn" onclick="hideHelp()">✕</button>
+    </div>
+    <div class="help-body">
+      <div class="help-section">
+        <div class="help-section-title">ZIPの読み込み</div>
+        <div class="help-item">
+          <div class="help-item-label">ZIPボタン</div>
+          <div class="help-item-desc">会話ログが入ったZIPファイルを選んで読み込む。.txt / .md / .log 形式のファイルが対象。複数のZIPを同時に選べる。同じタイトルのファイルは上書き保存される。</div>
+        </div>
+      </div>
+      <div class="help-section">
+        <div class="help-section-title">ファイル一覧（左メニュー）</div>
+        <div class="help-item">
+          <div class="help-item-label">ハンバーガーボタン（≡）</div>
+          <div class="help-item-desc">左上のボタンでサイドバーを開閉できる。</div>
+        </div>
+        <div class="help-item">
+          <div class="help-item-label">AIフィルター</div>
+          <div class="help-item-desc">タブで ChatGPT / Grok / DeepSeek / Claude / Dola に絞り込める。ファイル名のパターンで自動判定される。</div>
+        </div>
+      </div>
+      <div class="help-section">
+        <div class="help-section-title">検索</div>
+        <div class="help-item">
+          <div class="help-item-label">タイトルのみ / 内容も検索</div>
+          <div class="help-item-desc">「タイトルのみ」はファイル名で検索。「内容も検索」は会話の中身まで全文検索する。内容検索は時間がかかることがある。</div>
+        </div>
+        <div class="help-item">
+          <div class="help-item-label">AND / OR</div>
+          <div class="help-item-desc">スペース区切りで複数のキーワードを入力できる。ANDは全部含むものだけ、ORはどれか一つでも含むものを表示する。3つ以上でも使える。</div>
+        </div>
+        <div class="help-item">
+          <div class="help-item-label">番号 from〜to</div>
+          <div class="help-item-desc">ファイル名に含まれる番号で範囲を絞り込める。例えば from=001 to=100 にすると番号が1〜100のファイルだけ表示される。片方だけ入力してもOK。</div>
+        </div>
+        <div class="help-item">
+          <div class="help-item-label">検索進捗バー</div>
+          <div class="help-item-desc">内容検索中はサイドバー内に細いバーが伸びて進行状況がわかる。</div>
+        </div>
+      </div>
+      <div class="help-section">
+        <div class="help-section-title">会話の表示</div>
+        <div class="help-item">
+          <div class="help-item-label">ページめくり</div>
+          <div class="help-item-desc">「私：」で始まる行が1ページの区切りになる。上部のボタンか、画面を左右にスワイプしてめくれる。|← / →| で最初・最後のページに飛べる。</div>
+        </div>
+        <div class="help-item">
+          <div class="help-item-label">スワイプ</div>
+          <div class="help-item-desc">会話エリアを左にスワイプで次のページ、右にスワイプで前のページに移動できる。</div>
+        </div>
+      </div>
+      <div class="help-section">
+        <div class="help-section-title">ヒットパネル</div>
+        <div class="help-item">
+          <div class="help-item-label">ヒット一覧</div>
+          <div class="help-item-desc">内容検索でヒットしたファイルを開くと、ページナビの下にヒット一覧が表示される。各行にページ番号（p.3 など）とヒットした箇所のテキストが出る。タップするとそのページに飛べる。</div>
+        </div>
+        <div class="help-item">
+          <div class="help-item-label">折りたたみ</div>
+          <div class="help-item-desc">ヒット一覧のヘッダーをタップすると▲▼で折りたたみ・展開できる。</div>
+        </div>
+      </div>
+      <div class="help-section">
+        <div class="help-section-title">その他</div>
+        <div class="help-item">
+          <div class="help-item-label">全削除</div>
+          <div class="help-item-desc">保存されている全データを削除する。確認ダイアログが出る。</div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -982,6 +1073,15 @@ async function clearAll() {
 
 function escHtml(s) {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function showHelp() {
+  document.getElementById("help-overlay").classList.remove("hidden");
+}
+function hideHelp(e) {
+  if (!e || e.target === document.getElementById("help-overlay")) {
+    document.getElementById("help-overlay").classList.add("hidden");
+  }
 }
 </script>
 </body>
