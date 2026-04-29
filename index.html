@@ -826,6 +826,23 @@ document.querySelectorAll('input[name="searchAndOr"]').forEach(radio => {
   }, { passive: true });
 })();
 
+// スワイプでファイルリストページめくり
+(function() {
+  let tx = 0, ty = 0;
+  const fl = document.getElementById("file-list");
+  fl.addEventListener("touchstart", e => {
+    tx = e.touches[0].clientX;
+    ty = e.touches[0].clientY;
+  }, { passive: true });
+  fl.addEventListener("touchend", e => {
+    const dx = e.changedTouches[0].clientX - tx;
+    const dy = e.changedTouches[0].clientY - ty;
+    if (Math.abs(dx) > 30 && Math.abs(dx) > Math.abs(dy)) {
+      listPageMove(dx < 0 ? 1 : -1);
+    }
+  }, { passive: true });
+})();
+
 async function deleteFile(e, id) {
   e.stopPropagation();
   if (!confirm("このファイルを削除しますか？\n※元に戻せません")) return;
