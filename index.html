@@ -186,22 +186,25 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 
 <div id="pw-screen">
   <div class="pw-logo">AI LOG VIEWER</div>
-  <div class="pw-title">パスワードを入力</div>
+  <div class="pw-title" id="pw-title">パスワードを入力</div>
   <div class="pw-box">
     <input type="password" class="pw-input" id="pw-input" placeholder="パスワード" autocomplete="off">
     <div class="pw-err" id="pw-err"></div>
-    <button class="pw-btn" onclick="checkPassword()">ロック解除</button>
+    <button class="pw-btn" id="pw-login-btn" onclick="checkPassword()">ロック解除</button>
+    <button class="pw-btn" id="pw-admin-btn" onclick="switchToAdminLogin()" style="background:var(--surface2);border:1px solid var(--accent);color:var(--accent2);margin-top:4px;">🔑 管理者ログイン</button>
+    <button class="pw-btn" id="pw-back-btn" onclick="switchToUserLogin()" style="display:none;background:var(--surface2);border:1px solid var(--border);color:var(--muted);margin-top:4px;">← 戻る</button>
   </div>
 </div>
 
 <div class="topbar">
   <div class="menu-btn" id="menu-btn" onclick="toggleMenu()"><span></span><span></span><span></span></div>
   <div class="topbar-title" id="topbar-title">AI会話ログ</div>
+  <div id="admin-badge" style="display:none;font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--accent2);background:rgba(124,106,247,0.15);border:1px solid var(--accent);border-radius:4px;padding:2px 7px;flex-shrink:0;">管理者</div>
   <div class="topbar-actions">
     <input type="file" id="zipInput" accept=".zip" multiple hidden>
-    <button class="btn primary" id="zip-btn" onclick="document.getElementById('zipInput').click()">ZIP</button>
+    <button class="btn primary" id="zip-btn" style="display:none;" onclick="document.getElementById('zipInput').click()">ZIP</button>
     <button class="btn" onclick="showHelp()">？</button>
-    <button class="btn" onclick="clearAll()">全削除</button>
+    <button class="btn" id="clear-btn" style="display:none;" onclick="clearAll()">全削除</button>
   </div>
 </div>
 
@@ -381,6 +384,8 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 
 <script>
 const PASS         = "ai-shinan";
+const ADMIN_PASS   = "0430";
+let isAdmin        = false;
 const SUPABASE_URL = "https://mtprohzzgfdohlxvfpwl.supabase.co";
 const SUPABASE_KEY = "sb_publishable_9jqBvmC7d8VxewxbzAHeYA_SoTmobit";
 const TABLE        = "logs";
@@ -533,11 +538,46 @@ async function sbUpsertSafe(title, content, ai_type) {
 }
 
 // パスワード
+let isAdminMode = false;
 document.getElementById("pw-input").addEventListener("keydown", e => { if (e.key === "Enter") checkPassword(); });
+
+function switchToAdminLogin() {
+  isAdminMode = true;
+  document.getElementById("pw-title").textContent = "管理者パスワードを入力";
+  document.getElementById("pw-input").placeholder = "管理者パスワード";
+  document.getElementById("pw-input").value = "";
+  document.getElementById("pw-err").textContent = "";
+  document.getElementById("pw-login-btn").textContent = "管理者ログイン";
+  document.getElementById("pw-admin-btn").style.display = "none";
+  document.getElementById("pw-back-btn").style.display = "block";
+  document.getElementById("pw-input").focus();
+}
+
+function switchToUserLogin() {
+  isAdminMode = false;
+  document.getElementById("pw-title").textContent = "パスワードを入力";
+  document.getElementById("pw-input").placeholder = "パスワード";
+  document.getElementById("pw-input").value = "";
+  document.getElementById("pw-err").textContent = "";
+  document.getElementById("pw-login-btn").textContent = "ロック解除";
+  document.getElementById("pw-admin-btn").style.display = "block";
+  document.getElementById("pw-back-btn").style.display = "none";
+  document.getElementById("pw-input").focus();
+}
+
+function applyAdminUI() {
+  isAdmin = true;
+  document.getElementById("admin-badge").style.display = "flex";
+  document.getElementById("zip-btn").style.display = "";
+  document.getElementById("clear-btn").style.display = "";
+}
+
 function checkPassword() {
   const inp = document.getElementById("pw-input");
   const err = document.getElementById("pw-err");
-  if (inp.value === PASS) {
+  const correctPass = isAdminMode ? ADMIN_PASS : PASS;
+  if (inp.value === correctPass) {
+    if (isAdminMode) applyAdminUI();
     const s = document.getElementById("pw-screen");
     s.classList.add("hidden");
     setTimeout(() => s.style.display = "none", 300);
@@ -848,6 +888,7 @@ document.querySelectorAll('input[name="searchAndOr"]').forEach(radio => {
 
 async function deleteFile(e, id) {
   e.stopPropagation();
+  if (!isAdmin) { showToast("管理者のみ操作できます", "error"); return; }
   if (!confirm("このファイルを削除しますか？\n※元に戻せません")) return;
   try {
     await sbDeleteOne(id);
@@ -925,7 +966,7 @@ function renderFileList() {
         <div class="file-item-meta">
           <span class="file-date">${date}</span>
           <span class="file-page-count">${f.pageCount != null ? f.pageCount + 'p' : ''}</span>
-          <button class="file-delete-btn" onclick="deleteFile(event,${f.id})">削除</button>
+          <button class="file-delete-btn" style="${isAdmin ? '' : 'display:none;'}" onclick="deleteFile(event,${f.id})">削除</button>
         </div>
         ${snippetsHtml}
       </div>`;
@@ -1137,6 +1178,7 @@ document.getElementById("zipInput").addEventListener("change", async e => {
   const files = Array.from(e.target.files);
   e.target.value = "";
   if (!files.length) return;
+  if (!isAdmin) { showToast("管理者のみ操作できます", "error"); return; }
   if (isImporting) { showToast("読み込み中です…", "error"); return; }
   isImporting = true;
   document.getElementById("zip-btn").disabled = true;
@@ -1189,6 +1231,7 @@ document.getElementById("zipInput").addEventListener("change", async e => {
 
 // 全削除
 async function clearAll() {
+  if (!isAdmin) { showToast("管理者のみ操作できます", "error"); return; }
   if (allFiles.length === 0) { showToast("削除するファイルがない", "error"); return; }
   if (!confirm("全ファイルを削除しますか？\n※元に戻せません")) return;
   try {
