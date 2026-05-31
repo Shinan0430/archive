@@ -151,6 +151,8 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 #toast.success { border-color: var(--success); color: var(--success); }
 #toast.error { border-color: var(--error); color: var(--error); }
 
+.admin-badge { font-size: 10px; font-family: 'JetBrains Mono', monospace; padding: 3px 7px; border-radius: 4px; background: rgba(251,191,36,0.15); color: #fbbf24; border: 1px solid rgba(251,191,36,0.3); letter-spacing: 1px; flex-shrink: 0; }
+
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
@@ -199,9 +201,10 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
   <div class="topbar-title" id="topbar-title">AI会話ログ</div>
   <div class="topbar-actions">
     <input type="file" id="zipInput" accept=".zip" multiple hidden>
-    <button class="btn primary" id="zip-btn" onclick="document.getElementById('zipInput').click()">ZIP</button>
+    <button class="btn primary admin-only" id="zip-btn" style="display:none" onclick="document.getElementById('zipInput').click()">ZIP</button>
+    <span id="admin-badge" class="admin-badge" style="display:none">管理者</span>
     <button class="btn" onclick="showHelp()">？</button>
-    <button class="btn" onclick="clearAll()">全削除</button>
+    <button class="btn admin-only" style="display:none" onclick="clearAll()">全削除</button>
   </div>
 </div>
 
@@ -381,6 +384,8 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 
 <script>
 const PASS         = "ai-shinan";
+const ADMIN_PASS   = "0430";
+let isAdmin = false;
 const SUPABASE_URL = "https://mtprohzzgfdohlxvfpwl.supabase.co";
 const SUPABASE_KEY = "sb_publishable_9jqBvmC7d8VxewxbzAHeYA_SoTmobit";
 const TABLE        = "logs";
@@ -537,7 +542,17 @@ document.getElementById("pw-input").addEventListener("keydown", e => { if (e.key
 function checkPassword() {
   const inp = document.getElementById("pw-input");
   const err = document.getElementById("pw-err");
-  if (inp.value === PASS) {
+  const val = inp.value;
+  if (val === ADMIN_PASS) {
+    isAdmin = true;
+    applyAdminUI();
+    const s = document.getElementById("pw-screen");
+    s.classList.add("hidden");
+    setTimeout(() => s.style.display = "none", 300);
+    loadList();
+  } else if (val === PASS) {
+    isAdmin = false;
+    applyAdminUI();
     const s = document.getElementById("pw-screen");
     s.classList.add("hidden");
     setTimeout(() => s.style.display = "none", 300);
@@ -547,6 +562,13 @@ function checkPassword() {
     inp.classList.add("error"); inp.value = "";
     setTimeout(() => { inp.classList.remove("error"); err.textContent = ""; }, 1500);
   }
+}
+
+function applyAdminUI() {
+  const adminEls = document.querySelectorAll(".admin-only");
+  adminEls.forEach(el => el.style.display = isAdmin ? "" : "none");
+  const badge = document.getElementById("admin-badge");
+  if (badge) badge.style.display = isAdmin ? "inline-flex" : "none";
 }
 
 // UI状態
@@ -925,7 +947,7 @@ function renderFileList() {
         <div class="file-item-meta">
           <span class="file-date">${date}</span>
           <span class="file-page-count">${f.pageCount != null ? f.pageCount + 'p' : ''}</span>
-          <button class="file-delete-btn" onclick="deleteFile(event,${f.id})">削除</button>
+          <button class="file-delete-btn admin-only" style="display:${isAdmin?'':'none'}" onclick="deleteFile(event,${f.id})">削除</button>
         </div>
         ${snippetsHtml}
       </div>`;
@@ -1137,6 +1159,7 @@ document.getElementById("zipInput").addEventListener("change", async e => {
   const files = Array.from(e.target.files);
   e.target.value = "";
   if (!files.length) return;
+  if (!isAdmin) { showToast("管理者のみ操作できます", "error"); return; }
   if (isImporting) { showToast("読み込み中です…", "error"); return; }
   isImporting = true;
   document.getElementById("zip-btn").disabled = true;
@@ -1189,6 +1212,7 @@ document.getElementById("zipInput").addEventListener("change", async e => {
 
 // 全削除
 async function clearAll() {
+  if (!isAdmin) { showToast("管理者のみ操作できます", "error"); return; }
   if (allFiles.length === 0) { showToast("削除するファイルがない", "error"); return; }
   if (!confirm("全ファイルを削除しますか？\n※元に戻せません")) return;
   try {
