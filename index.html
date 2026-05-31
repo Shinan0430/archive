@@ -566,7 +566,9 @@ function checkPassword() {
 
 function applyAdminUI() {
   const adminEls = document.querySelectorAll(".admin-only");
-  adminEls.forEach(el => el.style.display = isAdmin ? "" : "none");
+  adminEls.forEach(el => {
+    el.style.display = isAdmin ? (el.tagName === "BUTTON" ? "inline-block" : "") : "none";
+  });
   const badge = document.getElementById("admin-badge");
   if (badge) badge.style.display = isAdmin ? "inline-flex" : "none";
 }
@@ -947,7 +949,7 @@ function renderFileList() {
         <div class="file-item-meta">
           <span class="file-date">${date}</span>
           <span class="file-page-count">${f.pageCount != null ? f.pageCount + 'p' : ''}</span>
-          <button class="file-delete-btn admin-only" style="display:${isAdmin?'':'none'}" onclick="deleteFile(event,${f.id})">削除</button>
+          <button class="file-delete-btn admin-only" style="display:${isAdmin?'inline-block':'none'}" onclick="deleteFile(event,${f.id})">削除</button>
         </div>
         ${snippetsHtml}
       </div>`;
